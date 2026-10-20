@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/files.h"
 #include "libc/nt/memory.h"
@@ -27,6 +27,7 @@
 #include "libc/nt/thunk/msabi.h"
 
 __msabi extern typeof(FindNextFile) *const __imp_FindNextFileW;
+__msabi extern typeof(GetLastError) *const __imp_GetLastError;
 
 /**
  * Finds more files in directory.
@@ -38,17 +39,14 @@ textwindows bool32 FindNextFile(int64_t hFindFile,
   ok = __imp_FindNextFileW(hFindFile, out_lpFindFileData);
   if (ok) {
     NTTRACE("FindNextFile(%ld, [{"
-            ".cFileName=%#hs, "
+            ".cFileName=%#!hs, "
             ".dwFileAttributes=%s, "
-            ".dwFileType=%s"
             "}]) → %hhhd% m",
             hFindFile, out_lpFindFileData->cFileName,
-            DescribeNtFileFlagAttr(out_lpFindFileData->dwFileAttributes),
-            DescribeNtFiletypeFlags(out_lpFindFileData->dwFileType), ok);
+            DescribeNtFileFlagAttr(out_lpFindFileData->dwFileAttributes), ok);
   } else {
-    if (GetLastError() != kNtErrorNoMoreFiles)
-      __winerr();
-    NTTRACE("FindNextFile(%ld) → %hhhd% m", hFindFile, ok);
+    NTTRACE("FindNextFile(%ld) → {%hhhd, %d}", hFindFile, ok,
+            __imp_GetLastError());
   }
   return ok;
 }

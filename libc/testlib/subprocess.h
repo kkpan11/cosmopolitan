@@ -1,7 +1,7 @@
 #ifndef COSMOPOLITAN_LIBC_TESTLIB_SUBPROCESS_H_
 #define COSMOPOLITAN_LIBC_TESTLIB_SUBPROCESS_H_
 #include "libc/calls/calls.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/testlib/testlib.h"
 COSMOPOLITAN_C_START_
@@ -59,21 +59,24 @@ COSMOPOLITAN_C_START_
     if (!child) {
 
 #define EXITS(CODE) \
-  PARENT()          \
+  PARENT();         \
   WAIT(exit, CODE)
 
 #define TERMS(SIG) \
-  PARENT()         \
+  PARENT();        \
   WAIT(term, SIG)
 
 #define PARENT()                                       \
   _Exit(MAX(0, MIN(255, g_testlib_failed - _failed))); \
-  }
+  }                                                    \
+  testlib_startparent(child)
 
 #define WAIT(KIND, CODE)                                         \
   testlib_waitfor##KIND(__FILE__, __LINE__, #CODE, CODE, child); \
   }
 
+void testlib_startparent(int);
+void testlib_stopsparent(void);
 void testlib_waitforexit(const char *, int, const char *, int, int);
 void testlib_waitforterm(const char *, int, const char *, int, int);
 

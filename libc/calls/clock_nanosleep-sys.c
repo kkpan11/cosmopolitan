@@ -22,8 +22,8 @@
 #include "libc/calls/struct/timespec.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/thread.h"
@@ -54,8 +54,5 @@ int sys_clock_nanosleep(int clock, int flags,  //
     rc = ecanceled();
   }
   END_CANCELATION_POINT;
-  STRACE("sys_clock_nanosleep(%s, %s, %s, [%s]) → %d% m",
-         DescribeClockName(clock), DescribeSleepFlags(flags),
-         DescribeTimespec(0, req), DescribeTimespec(rc, rem), rc);
   return rc;
 }

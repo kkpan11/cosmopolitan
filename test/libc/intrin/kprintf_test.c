@@ -17,13 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/kprintf.h"
+#include "libc/bsdstdlib.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
 #include "libc/log/libfatal.internal.h"
-#include "libc/macros.internal.h"
-#include "libc/runtime/memtrack.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/serialize.h"
@@ -56,7 +57,6 @@ static const struct {
   uintptr_t arg1;
   uintptr_t arg2;
 } V[] = {
-    {"!!WONTFMT", (const char *)31337, 123},              //
     {"!!31337", "%s", 0x31337},                           //
     {"!!1", "%#s", 1},                                    //
     {"!!feff800000031337", "%s", 0xfeff800000031337ull},  //
@@ -189,7 +189,7 @@ static const struct {
 TEST(ksnprintf, test) {
   char b[48], g[48];
   size_t i, j, n, rc;
-  rngset(g, sizeof(g), 0, 0);
+  arc4random_buf(g, sizeof(g));
   for (i = 0; i < ARRAYLEN(V); ++i) {
     bzero(b, 48);
     n = strlen(V[i].want);
@@ -226,9 +226,9 @@ TEST(ksnprintf, fuzzTheUnbreakable) {
   size_t i;
   uint64_t x;
   char *f, b[32];
-  _Alignas(FRAMESIZE) static const char weasel[FRAMESIZE];
+  _Alignas(65536) static const char weasel[65535];
   f = (void *)__veil("r", weasel);
-  EXPECT_SYS(0, 0, mprotect(f, FRAMESIZE, PROT_READ | PROT_WRITE));
+  EXPECT_SYS(0, 0, mprotect(f, getpagesize(), PROT_READ | PROT_WRITE));
   strcpy(f, "hello %s\n");
   EXPECT_EQ(12, ksnprintf(b, sizeof(b), f, "world"));
   EXPECT_STREQ("hello world\n", b);
@@ -240,7 +240,7 @@ TEST(ksnprintf, fuzzTheUnbreakable) {
     f[Rando() & 15] = '%';
     ksnprintf(b, sizeof(b), f, lemur64(), lemur64(), lemur64());
   }
-  EXPECT_SYS(0, 0, mprotect(f, FRAMESIZE, PROT_READ));
+  EXPECT_SYS(0, 0, mprotect(f, getpagesize(), PROT_READ));
 }
 
 TEST(kprintf, testFailure_wontClobberErrnoAndBypassesSystemCallSupport) {
@@ -267,13 +267,6 @@ TEST(ksnprintf, testy) {
   EXPECT_STREQ("!!1", b);
 }
 
-TEST(ksnprintf, testNonTextFmt_wontFormat) {
-  char b[32];
-  char variable_format_string[16] = "%s";
-  EXPECT_EQ(9, ksnprintf(b, 32, variable_format_string, NULL));
-  EXPECT_STREQ("!!WONTFMT", b);
-}
-
 TEST(ksnprintf, testMisalignedPointer_wontFormat) {
   char b[32];
   const char16_t *s = u"hello";
@@ -282,13 +275,16 @@ TEST(ksnprintf, testMisalignedPointer_wontFormat) {
 }
 
 TEST(ksnprintf, testUnterminatedOverrun_truncatesAtPageBoundary) {
+  if (IsWindows())
+    return;  // needs carving
   char *m;
   char b[32];
-  m = memset(_mapanon(FRAMESIZE * 2), 1, FRAMESIZE);
-  EXPECT_SYS(0, 0, munmap(m + FRAMESIZE, FRAMESIZE));
-  EXPECT_EQ(12, ksnprintf(b, 32, "%'s", m + FRAMESIZE - 3));
+  int gran = getgransize();
+  m = memset(_mapanon(gran * 2), 1, gran);
+  EXPECT_SYS(0, 0, munmap(m + gran, gran));
+  EXPECT_EQ(12, ksnprintf(b, 32, "%'s", m + gran - 3));
   EXPECT_STREQ("\\001\\001\\001", b);
-  EXPECT_SYS(0, 0, munmap(m, FRAMESIZE));
+  EXPECT_SYS(0, 0, munmap(m, gran));
 }
 
 TEST(ksnprintf, testEmptyBuffer_determinesTrueLength) {
@@ -384,27 +380,27 @@ TEST(ksnprintf, negativeOverflowIdiom_isSafe) {
 
 TEST(ksnprintf, truncation) {
   char buf[16] = {0};
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(0, 0, "%s", "xxxxx");
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(buf, 1, "%s", "xxxxx");
   EXPECT_STREQ("", buf);
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(buf, 2, "%s", "xxxxx");
   EXPECT_STREQ(".", buf);
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(buf, 3, "%s", "xxxxx");
   EXPECT_STREQ("..", buf);
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(buf, 4, "%s", "xxxxx");
   EXPECT_STREQ("...", buf);
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(buf, 5, "%s", "xxxxx");
   EXPECT_STREQ("x...", buf);
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(buf, 6, "%s", "xxxxxxxxxxx");
   EXPECT_STREQ("xx...", buf);
-  rngset(buf, sizeof(buf) - 1, lemur64, -1);
+  arc4random_buf(buf, sizeof(buf) - 1);
   ksnprintf(buf, 7, "%s", "xxxxxxxxx");
   EXPECT_STREQ("xxx...", buf);
 }

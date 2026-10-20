@@ -17,10 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/bswap.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/serialize.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "net/http/http.h"
 
 static const char kNoCompressExts[][8] = {
@@ -55,7 +55,7 @@ static bool BisectNoCompressExts(uint64_t ext) {
   return false;
 }
 
-bool IsNoCompressExt(const char *p, size_t n) {
+bool32 IsNoCompressExt(const char *p, size_t n) {
   int c, i;
   uint64_t w;
   if (n == -1)

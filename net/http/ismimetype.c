@@ -17,13 +17,13 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "net/http/http.h"
 
 /**
  * Returns true if content-type 𝑡 has mime-type 𝑠.
  */
-bool IsMimeType(const char *t, size_t n, const char *s) {
+bool32 IsMimeType(const char *t, size_t n, const char *s) {
   size_t i;
   if (n == -1)
     n = t ? strlen(t) : 0;

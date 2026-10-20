@@ -20,7 +20,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
 
@@ -42,7 +42,7 @@ int tcsetsid(int fd, int pid) {
     rc = enosys();
   } else if (pid != sys_getsid(0)) {
     rc = einval();
-  } else if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+  } else if (__isfdkind(fd, kFdZip)) {
     rc = enotty();
   } else {
     rc = sys_ioctl(fd, TIOCSCTTY, 0);

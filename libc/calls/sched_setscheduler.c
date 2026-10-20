@@ -20,8 +20,8 @@
 #include "libc/calls/struct/sched_param.h"
 #include "libc/calls/struct/sched_param.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/tls.h"
@@ -41,36 +41,16 @@
  *     special; the kernel treats this as a thread id (noting that
  *     `getpid() == gettid()` is always the case on Linux for the main
  *     thread) and will only take effect for the specified tid.
- *     Therefore this function is POSIX-compliant iif `!__threaded`.
  *
  * @param policy specifies the kernel's timesharing strategy.
  *
  *     The `policy` must have one of:
  *
- *     - `SCHED_OTHER` (or `SCHED_NORMAL`) for the default policy
+ *     - `SCHED_OTHER` for the default policy
  *
  *     - `SCHED_RR` for real-time round-robin scheduling
  *
  *     - `SCHED_FIFO` for real-time first-in first-out scheduling
- *
- *     - `SCHED_BATCH` for "batch" style execution of processes if
- *       supported (Linux), otherwise it's treated as `SCHED_OTHER`
- *
- *     - `SCHED_IDLE` for running very low priority background jobs if
- *       it's supported (Linux), otherwise this is `SCHED_OTHER`.
- *       Pledging away scheduling privilege is permanent for your
- *       process; if a subsequent attempt is made to restore the
- *       `SCHED_OTHER` policy then this system call will `EPERM` (but on
- *       older kernels like RHEL7 this isn't the case). This policy
- *       isn't available on old Linux kernels like RHEL5, where it'll
- *       raise `EINVAL`.
- *
- *     The `policy` may optionally bitwise-or any one of:
- *
- *     - `SCHED_RESET_ON_FORK` will cause the scheduling policy to be
- *       automatically reset to `SCHED_NORMAL` upon fork() if supported;
- *       otherwise this flag is polyfilled as zero, so that it may be
- *       safely used (without having to check if the o/s is Linux).
  *
  * @param param must be set to the scheduler parameter, which should be
  *     greater than or equal to sched_get_priority_min(policy) and less

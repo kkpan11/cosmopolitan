@@ -23,9 +23,9 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/log.h"
 #include "libc/mem/alloca.h"
@@ -43,6 +43,8 @@ static inline const char *__strace_fstatat_flags(char buf[12], int flags) {
 
 /**
  * Returns information about thing.
+ *
+ * On Windows, this implementation changes the file access time.
  *
  * On Windows, this implementation always sets `st_uid` and `st_gid` to
  * `getuid()` and `getgid()`. Anyone who relies upon the information to
@@ -62,9 +64,10 @@ static inline const char *__strace_fstatat_flags(char buf[12], int flags) {
  * @raise EILSEQ if `path` contains illegal UTF-8 sequences (Windows/MacOS)
  * @raise ENOTDIR if `path` is relative and `dirfd` isn't an open directory
  * @raise ENOEXEC if `path` is a zip path and this executable isn't a zip file
- * @raise EOVERFLOW shouldn't be possible on 64-bit systems
+ * @raise ENOMEM if insufficient memory was available to the implementation
+ * @raise EILSEQ on Windows if `path` has bad utf-8 of control characters
  * @raise ELOOP may ahappen if `SYMLOOP_MAX` symlinks were dereferenced
- * @raise ENAMETOOLONG may happen if `path` exceeded `PATH_MAX`
+ * @raise ENAMETOOLONG if resolved `path` exceeded `PATH_MAX`
  * @raise EFAULT if `path` or `st` point to invalid memory
  * @raise EINVAL if `flags` has unsupported bits
  * @return 0 on success, or -1 w/ errno
@@ -76,21 +79,16 @@ int fstatat(int dirfd, const char *path, struct stat *st, int flags) {
   // execve() depends on this
   int rc;
   struct ZiposUri zipname;
-  if (IsAsan() && (!__asan_is_valid_str(path) ||  //
-                   !__asan_is_valid(st, sizeof(*st)))) {
+  if (flags & ~AT_SYMLINK_NOFOLLOW) {
+    rc = einval();
+  } else if (kisdangerous(path) || kisdangerous(st)) {
     rc = efault();
-  } else if (flags & ~AT_SYMLINK_NOFOLLOW) {
-    return einval();
   } else if (__isfdkind(dirfd, kFdZip)) {
     STRACE("zipos dirfd not supported yet");
     rc = einval();
   } else if (_weaken(__zipos_stat) &&
              _weaken(__zipos_parseuri)(path, &zipname) != -1) {
-    if (!__vforked) {
-      rc = _weaken(__zipos_stat)(&zipname, st);
-    } else {
-      rc = enotsup();
-    }
+    rc = _weaken(__zipos_stat)(&zipname, st);
   } else if (IsLinux() || IsXnu() || IsFreebsd() || IsOpenbsd() || IsNetbsd()) {
     rc = sys_fstatat(dirfd, path, st, flags);
   } else if (IsWindows()) {

@@ -43,6 +43,7 @@ TEST_TOOL_NET_DIRECTDEPS =					\
 	LIBC_SYSV						\
 	LIBC_TESTLIB						\
 	LIBC_THREAD						\
+	LIBC_THREAD						\
 	LIBC_X							\
 	THIRD_PARTY_MBEDTLS					\
 	THIRD_PARTY_REGEX					\
@@ -82,10 +83,10 @@ o/$(MODE)/test/tool/net/redbean-tester.dbg:			\
 	@$(APELINK)
 
 o/$(MODE)/test/tool/net/redbean_test.runs:			\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
+		private .PLEDGE = inet
 
 o/$(MODE)/test/tool/net/sqlite_test.runs:			\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc flock
+		private .PLEDGE = flock
 
 .PHONY: o/$(MODE)/test/tool/net
 o/$(MODE)/test/tool/net:					\

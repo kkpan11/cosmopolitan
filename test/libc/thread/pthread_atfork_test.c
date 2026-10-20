@@ -16,8 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/atomic.h"
 #include "libc/calls/calls.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
@@ -45,11 +49,9 @@ void *ForceThreadingMode(void *arg) {
 }
 
 TEST(pthread_atfork, test) {
-  __enable_threads();
   SPAWN(fork);
   ASSERT_EQ(0, pthread_atfork(prepare1, parent1, child1));
   ASSERT_EQ(0, pthread_atfork(prepare2, parent2, child2));
-  flockfile(stdout);
   SPAWN(fork);
   flockfile(stdout);
   ASSERT_STREQ("prepare2", A[0]);
@@ -58,7 +60,6 @@ TEST(pthread_atfork, test) {
   ASSERT_STREQ("child2", A[3]);
   funlockfile(stdout);
   EXITS(0);
-  funlockfile(stdout);
   ASSERT_STREQ("prepare2", A[0]);
   ASSERT_STREQ("prepare1", A[1]);
   ASSERT_STREQ("parent1", A[2]);
@@ -66,7 +67,7 @@ TEST(pthread_atfork, test) {
   EXITS(0);
 }
 
-pthread_mutex_t mu;
+pthread_mutex_t mu = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 void mu_lock(void) {
   pthread_mutex_lock(&mu);
@@ -77,7 +78,7 @@ void mu_unlock(void) {
 }
 
 void mu_wipe(void) {
-  pthread_mutex_init(&mu, 0);
+  pthread_mutex_wipe_np(&mu);
 }
 
 void *Worker(void *arg) {
@@ -103,10 +104,8 @@ TEST(pthread_atfork, fork_exit_torture) {
   pthread_atfork(mu_lock, mu_unlock, mu_wipe);
   int i, n = 4;
   pthread_t *t = gc(malloc(sizeof(pthread_t) * n));
-  for (i = 0; i < n; ++i) {
+  for (i = 0; i < n; ++i)
     ASSERT_EQ(0, pthread_create(t + i, 0, Worker, 0));
-  }
-  for (i = 0; i < n; ++i) {
+  for (i = 0; i < n; ++i)
     ASSERT_EQ(0, pthread_join(t[i], 0));
-  }
 }

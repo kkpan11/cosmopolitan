@@ -24,10 +24,10 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/intrin/iscall.internal.h"
+#include "libc/intrin/describebacktrace.h"
+#include "libc/intrin/iscall.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/promises.internal.h"
+#include "libc/intrin/promises.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/color.internal.h"
@@ -194,7 +194,6 @@ static int PrintBacktrace(int fd, const struct StackFrame *bp) {
 
 void ShowBacktrace(int fd, const struct StackFrame *bp) {
   BLOCK_CANCELATION;
-#ifdef __FNO_OMIT_FRAME_POINTER__
   /* asan runtime depends on this function */
   ftrace_enabled(-1);
   strace_enabled(-1);
@@ -203,10 +202,5 @@ void ShowBacktrace(int fd, const struct StackFrame *bp) {
   PrintBacktrace(fd, bp);
   strace_enabled(+1);
   ftrace_enabled(+1);
-#else
-  (fprintf)(stderr, "ShowBacktrace() needs these flags to show C backtrace:\n"
-                    "\t-D__FNO_OMIT_FRAME_POINTER__\n"
-                    "\t-fno-omit-frame-pointer\n");
-#endif
   ALLOW_CANCELATION;
 }

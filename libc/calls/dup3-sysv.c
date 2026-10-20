@@ -22,7 +22,7 @@
 #include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
 
@@ -61,7 +61,26 @@ int32_t sys_dup3(int32_t oldfd, int32_t newfd, int flags) {
   cosmo_once(&g_dup3.once, sys_dup3_test);
 
   if (!g_dup3.demodernize) {
-    return __sys_dup3(oldfd, newfd, flags);
+    int flags2;
+    if (IsLinux()) {
+      flags2 = flags;
+    } else {
+      flags2 = 0;
+      if (flags & O_CLOEXEC) {
+        if (IsXnu()) {
+          flags2 |= 0x01000000;
+        } else if (IsFreebsd()) {
+          flags2 |= 0x00100000;
+        } else if (IsOpenbsd()) {
+          flags2 |= 0x00010000;
+        } else if (IsNetbsd()) {
+          flags2 |= 0x00400000;
+        } else {
+          return einval();
+        }
+      }
+    }
+    return __sys_dup3(oldfd, newfd, flags2);
   } else {
     return __fixupnewfd(sys_dup2(oldfd, newfd, 0), flags);
   }

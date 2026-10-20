@@ -27,12 +27,12 @@
 #include "libc/calls/ttydefaults.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/promises.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/promises.h"
+#include "libc/intrin/strace.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nexgen32e/cpuid4.internal.h"
 #include "libc/nexgen32e/kcpuids.h"
 #include "libc/nexgen32e/x86feature.h"
@@ -45,7 +45,6 @@
 #include "libc/nt/struct/startupinfo.h"
 #include "libc/runtime/clktck.h"
 #include "libc/runtime/internal.h"
-#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/sock/internal.h"
@@ -58,7 +57,6 @@
 #include "libc/sysv/consts/poll.h"
 #include "libc/sysv/consts/pr.h"
 #include "libc/sysv/consts/prio.h"
-#include "libc/sysv/consts/rlim.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "tool/decode/lib/idname.h"
@@ -288,6 +286,7 @@ textstartup void __printargs(const char *prologue) {
     kprintf(" LA57");
   if (X86_HAVE(FSGSBASE))
     kprintf(" FSGSBASE");
+  kprintf("\n");
 #elif defined(__aarch64__)
   kprintf("  AARCH64\n");
 #else
@@ -306,7 +305,7 @@ textstartup void __printargs(const char *prologue) {
       if (i && (u.pfds[i].revents & POLLNVAL))
         continue;
       PRINT(" ☼ %d (revents=%#hx fcntl(F_GETFL)=%s isatty()=%hhhd)", i,
-            u.pfds[i].revents, (DescribeOpenFlags)(oflagbuf, fcntl(i, F_GETFL)),
+            u.pfds[i].revents, _DescribeOpenFlags(oflagbuf, fcntl(i, F_GETFL)),
             isatty(i));
     }
   } else {
@@ -375,7 +374,7 @@ textstartup void __printargs(const char *prologue) {
         rlim.rlim_cur = -1;
       if (rlim.rlim_max == RLIM_INFINITY)
         rlim.rlim_max = -1;
-      PRINT(" ☼ %-20s %,16ld %,16ld", (DescribeRlimitName)(buf, i),
+      PRINT(" ☼ %-20s %,16ld %,16ld", _DescribeRlimitName(buf, i),
             rlim.rlim_cur, rlim.rlim_max);
       gotsome = true;
     }
@@ -383,15 +382,6 @@ textstartup void __printargs(const char *prologue) {
   if (!gotsome) {
     PRINT(" ☼ %s", "none");
   }
-
-  PRINT("");
-  PRINT("STACK");
-  size_t foss_stack_size = 4ul * 1024 * 1024;
-  PRINT(" ☼ %p __oldstack top", ROUNDUP(__oldstack + 1, foss_stack_size));
-  PRINT(" ☼ %p __oldstack ptr", __oldstack);
-  PRINT(" ☼ %p __oldstack bot", ROUNDDOWN(__oldstack, foss_stack_size));
-  PRINT(" ☼ %p __builtin_frame_address(0)", __builtin_frame_address(0));
-  PRINT(" ☼ %p GetStackPointer()", GetStackPointer());
 
   PRINT("");
   PRINT("ARGUMENTS (%p)", __argv);
@@ -451,10 +441,6 @@ textstartup void __printargs(const char *prologue) {
   PRINT(" ☼ %s = %d", "getegid()", getegid());
   PRINT(" ☼ %s = %d", "CLK_TCK", CLK_TCK);
   PRINT(" ☼ %s = %#s", "__get_tmpdir()", __get_tmpdir());
-#ifdef __x86_64__
-  PRINT(" ☼ %s = %#s", "kNtSystemDirectory", kNtSystemDirectory);
-  PRINT(" ☼ %s = %#s", "kNtWindowsDirectory", kNtWindowsDirectory);
-#endif
   PRINT(" ☼ %s = %#s", "__argv[0]", __argv[0]);
   PRINT(" ☼ %s = %#s", "program_invocation_name", program_invocation_name);
   PRINT(" ☼ %s = %#s", "program_invocation_short_name",
@@ -464,16 +450,11 @@ textstartup void __printargs(const char *prologue) {
   PRINT(" ☼ %s = %#s", "GetProgramExecutableName", GetProgramExecutableName());
   PRINT(" ☼ %s = %#s", "GetInterpreterExecutableName",
         GetInterpreterExecutableName(u.path, sizeof(u.path)));
-  PRINT(" ☼ %s = %p", "GetStackSize()", GetStackSize());
-  PRINT(" ☼ %s = %p", "GetGuardSize()", GetGuardSize());
-  PRINT(" ☼ %s = %p", "GetStackAddr()", GetStackAddr());
-  PRINT(" ☼ %s = %p", "GetStaticStackSize()", GetStaticStackSize());
-  PRINT(" ☼ %s = %p", "GetStaticStackAddr(0)", GetStaticStackAddr(0));
   PRINT(" ☼ %s = %p", "__builtin_frame_address(0)", __builtin_frame_address(0));
 
   PRINT("");
-  PRINT("MEMTRACK");
-  __print_maps();
+  PRINT("MEMORY MAPS");
+  __print_maps(0);
 
   PRINT("");
   PRINT("TERMIOS");

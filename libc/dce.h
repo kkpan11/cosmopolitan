@@ -37,12 +37,6 @@
 #define IsModeDbg() 0
 #endif
 
-#ifdef TRUSTWORTHY
-#define IsTrustworthy() 1
-#else
-#define IsTrustworthy() 0
-#endif
-
 #ifdef TINY
 #define IsTiny() 1
 #else
@@ -53,12 +47,6 @@
 #define IsOptimized() 1
 #else
 #define IsOptimized() 0
-#endif
-
-#ifdef __SANITIZE_ADDRESS__
-#define IsAsan() 1
-#else
-#define IsAsan() 0
 #endif
 
 #ifdef __aarch64__
@@ -82,17 +70,25 @@
 #endif
 
 #define SupportsLinux()   ((SUPPORT_VECTOR & _HOSTLINUX) == _HOSTLINUX)
-#define SupportsMetal()   ((SUPPORT_VECTOR & _HOSTMETAL) == _HOSTMETAL)
-#define SupportsWindows() ((SUPPORT_VECTOR & _HOSTWINDOWS) == _HOSTWINDOWS)
 #define SupportsXnu()     ((SUPPORT_VECTOR & _HOSTXNU) == _HOSTXNU)
 #define SupportsFreebsd() ((SUPPORT_VECTOR & _HOSTFREEBSD) == _HOSTFREEBSD)
-#define SupportsOpenbsd() ((SUPPORT_VECTOR & _HOSTOPENBSD) == _HOSTOPENBSD)
-#define SupportsNetbsd()  ((SUPPORT_VECTOR & _HOSTNETBSD) == _HOSTNETBSD)
 #define SupportsBsd() \
   (!!(SUPPORT_VECTOR & (_HOSTXNU | _HOSTFREEBSD | _HOSTOPENBSD | _HOSTNETBSD)))
 #define SupportsSystemv() \
   (!!(SUPPORT_VECTOR &    \
       (_HOSTLINUX | _HOSTXNU | _HOSTOPENBSD | _HOSTFREEBSD | _HOSTNETBSD)))
+
+#ifdef __x86_64__
+#define SupportsMetal()   ((SUPPORT_VECTOR & _HOSTMETAL) == _HOSTMETAL)
+#define SupportsWindows() ((SUPPORT_VECTOR & _HOSTWINDOWS) == _HOSTWINDOWS)
+#define SupportsOpenbsd() ((SUPPORT_VECTOR & _HOSTOPENBSD) == _HOSTOPENBSD)
+#define SupportsNetbsd()  ((SUPPORT_VECTOR & _HOSTNETBSD) == _HOSTNETBSD)
+#else
+#define SupportsMetal()   0
+#define SupportsWindows() 0
+#define SupportsOpenbsd() 0
+#define SupportsNetbsd()  0
+#endif
 
 #ifndef __ASSEMBLER__
 #define IsLinux()   (SupportsLinux() && (__hostos & _HOSTLINUX))

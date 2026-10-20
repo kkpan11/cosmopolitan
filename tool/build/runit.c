@@ -23,10 +23,11 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timespec.h"
+#include "libc/cosmotime.h"
 #include "libc/errno.h"
 #include "libc/fmt/libgen.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -45,6 +46,7 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/sock.h"
 #include "libc/temp.h"
@@ -56,9 +58,6 @@
 #include "third_party/zlib/zlib.h"
 #include "tool/build/lib/eztls.h"
 #include "tool/build/lib/psk.h"
-
-#define MAX_WAIT_CONNECT_SECONDS 12
-#define INITIAL_CONNECT_TIMEOUT  100000
 
 /**
  * @fileoverview Remote test runner.
@@ -121,23 +120,27 @@ int execute_latency;
 int handshake_latency;
 char g_hostname[128];
 uint16_t g_runitdport;
-volatile bool alarmed;
 
 int __sys_execve(const char *, char *const[], char *const[]);
 
-static void OnAlarm(int sig) {
-  alarmed = true;
-}
-
-wontreturn void ShowUsage(FILE *f, int rc) {
+[[noreturn]] void ShowUsage(FILE *f, int rc) {
   fprintf(f, "Usage: %s RUNITD PROGRAM HOSTNAME[:RUNITDPORT[:SSHPORT]]...\n",
           program_invocation_name);
   exit(rc);
   __builtin_unreachable();
 }
 
+bool IsRegularFile(const char *path) {
+  int e = errno;
+  struct stat st;
+  if (!stat(path, &st))
+    return S_ISREG(st.st_mode);
+  errno = e;
+  return false;
+}
+
 void CheckExists(const char *path) {
-  if (!isregularfile(path)) {
+  if (!IsRegularFile(path)) {
     fprintf(stderr, "error: %s: not found or irregular\n", path);
     ShowUsage(stderr, EX_USAGE);
     __builtin_unreachable();
@@ -145,55 +148,46 @@ void CheckExists(const char *path) {
 }
 
 void Connect(void) {
+  int rc;
   const char *ip4;
-  int rc, err, expo;
   struct addrinfo *ai;
-  struct timespec deadline;
-  if ((rc = getaddrinfo(g_hostname, gc(xasprintf("%hu", g_runitdport)),
-                        &kResolvHints, &ai)) != 0) {
+  struct timespec start = timespec_mono();
+  for (int us = 1;;) {
+    if (!(rc = getaddrinfo(g_hostname, gc(xasprintf("%hu", g_runitdport)),
+                           &kResolvHints, &ai)))
+      break;
+    if (rc == EAI_AGAIN) {
+      usleep(us);
+      if (us < 1000000)
+        us <<= 1;
+      continue;
+    }
     FATALF("%s:%hu: DNS lookup failed: %s", g_hostname, g_runitdport,
            gai_strerror(rc));
     __builtin_unreachable();
   }
-  ip4 = (const char *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr;
-  DEBUGF("connecting to %d.%d.%d.%d port %d", ip4[0], ip4[1], ip4[2], ip4[3],
-         ntohs(((struct sockaddr_in *)ai->ai_addr)->sin_port));
   CHECK_NE(-1,
            (g_sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)));
-  expo = INITIAL_CONNECT_TIMEOUT;
-  deadline = timespec_add(timespec_real(),
-                          timespec_fromseconds(MAX_WAIT_CONNECT_SECONDS));
-  LOGIFNEG1(sigaction(SIGALRM, &(struct sigaction){.sa_handler = OnAlarm}, 0));
-  DEBUGF("connecting to %s (%hhu.%hhu.%hhu.%hhu) to run %s", g_hostname, ip4[0],
-         ip4[1], ip4[2], ip4[3], g_prog);
-  struct timespec start = timespec_real();
-TryAgain:
-  alarmed = false;
-  LOGIFNEG1(setitimer(
-      ITIMER_REAL,
-      &(const struct itimerval){{0, 0}, {expo / 1000000, expo % 1000000}},
-      NULL));
-  rc = connect(g_sock, ai->ai_addr, ai->ai_addrlen);
-  err = errno;
-  if (rc == -1) {
-    if (err == EINTR) {
-      expo *= 1.5;
-      if (timespec_cmp(timespec_real(), deadline) >= 0) {
-        FATALF("timeout connecting to %s (%hhu.%hhu.%hhu.%hhu:%d)", g_hostname,
-               ip4[0], ip4[1], ip4[2], ip4[3],
-               ntohs(((struct sockaddr_in *)ai->ai_addr)->sin_port));
-        __builtin_unreachable();
-      }
-      goto TryAgain;
+  for (int us = 1;;) {
+    ip4 = (const char *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr;
+    DEBUGF("connecting to %s (%hhu.%hhu.%hhu.%hhu) to run %s", g_hostname,
+           ip4[0], ip4[1], ip4[2], ip4[3], g_prog);
+    if (!connect(g_sock, ai->ai_addr, ai->ai_addrlen))
+      break;
+    if (errno == ETIMEDOUT ||    //
+        errno == ENETUNREACH ||  //
+        errno == ECONNREFUSED) {
+      usleep(us);
+      if (us < 1000000)
+        us <<= 1;
+      continue;
     }
-    FATALF("%s(%s:%hu): %s", "connect", g_hostname, g_runitdport,
-           strerror(err));
-  } else {
-    DEBUGF("connected to %s", g_hostname);
+    FATALF("%s:%hu: DNS lookup failed: %s", g_hostname, g_runitdport,
+           gai_strerror(rc));
+    __builtin_unreachable();
   }
-  setitimer(ITIMER_REAL, &(const struct itimerval){0}, 0);
   freeaddrinfo(ai);
-  connect_latency = timespec_tomicros(timespec_sub(timespec_real(), start));
+  connect_latency = timespec_tomicros(timespec_sub(timespec_mono(), start));
 }
 
 bool Send(int tmpfd, const void *output, size_t outputsize) {
@@ -204,7 +198,8 @@ bool Send(int tmpfd, const void *output, size_t outputsize) {
   static bool once;
   static z_stream zs;
   zsize = 32768;
-  zbuf = gc(malloc(zsize));
+  if (!(zbuf = malloc(zsize)))
+    __builtin_trap();
   if (!once) {
     CHECK_EQ(Z_OK, deflateInit2(&zs, 4, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL,
                                 Z_DEFAULT_STRATEGY));
@@ -226,6 +221,7 @@ bool Send(int tmpfd, const void *output, size_t outputsize) {
       break;
     }
   } while (!zs.avail_out);
+  free(zbuf);
   return ok;
 }
 
@@ -307,7 +303,7 @@ bool Recv(char *p, int n) {
 
 int ReadResponse(void) {
   int exitcode;
-  struct timespec start = timespec_real();
+  struct timespec start = timespec_mono();
   for (;;) {
     char msg[5];
     if (!Recv(msg, 5)) {
@@ -352,7 +348,7 @@ int ReadResponse(void) {
       break;
     }
   }
-  execute_latency = timespec_tomicros(timespec_sub(timespec_real(), start));
+  execute_latency = timespec_tomicros(timespec_sub(timespec_mono(), start));
   close(g_sock);
   return exitcode;
 }
@@ -377,11 +373,15 @@ int RunOnHost(char *spec) {
   for (;;) {
     Connect();
     EzFd(g_sock);
-    struct timespec start = timespec_real();
+    struct timespec start = timespec_mono();
     err = EzHandshake2();
-    handshake_latency = timespec_tomicros(timespec_sub(timespec_real(), start));
+    handshake_latency = timespec_tomicros(timespec_sub(timespec_mono(), start));
     if (!err)
       break;
+    if (err == MBEDTLS_ERR_NET_CONN_RESET) {
+      close(g_sock);
+      continue;
+    }
     WARNF("handshake with %s:%d failed -0x%04x (%s)",  //
           g_hostname, g_runitdport, err, GetTlsError(err));
     close(g_sock);

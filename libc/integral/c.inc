@@ -1,7 +1,3 @@
-#if __GNUC__ + 0 < 2
-#define __attribute__(x)
-#endif
-
 #ifndef __cplusplus
 #define COSMOPOLITAN_C_START_
 #define COSMOPOLITAN_C_END_
@@ -10,71 +6,14 @@
 #define COSMOPOLITAN_CXX_USING_
 #endif
 
-#ifndef __ia16__
-#define __far
-#endif
-
 #if !defined(__GNUC__) && __cplusplus + 0 >= 201103L
 #define typeof(x) decltype(x)
 #elif !defined(__GNUC__) && __STDC_VERSION__ + 0 < 201112
 #define typeof(x) __typeof(x)
 #endif
 
-#ifdef __cplusplus
-#if __cplusplus >= 201103L
-#define _Alignof(x) alignof(x)
-#endif /* C++11 */
-#else  /* __cplusplus */
-#if __STDC_VERSION__ + 0 < 201112
-#if __GNUC__ + _MSC_VER + 0
-#define _Alignof(x) __alignof(x)
-#else
-#define _Alignof(x) /* basically all it ever did lool */ sizeof(x)
-#endif /* GNU/MSVC/!ANSI */
-#endif /* C11 */
-#endif /* __cplusplus */
-
-#if !defined(__cplusplus) && !defined(inline) && __STDC_VERSION__ + 0 < 199901
-#if defined(__GNUC__) || defined(_MSC_VER)
-#define inline __inline
-#else
-#define inline
-#define __inline
-#endif
-#endif
-
 #ifdef __chibicc__
 #define __extension__
-#endif
-
-#if __STDC_VERSION__ + 0 < 201112
-#ifdef __GNUC__
-#define _Alignas(x) __attribute__((__aligned__(x)))
-#elif defined(_MSC_VER)
-#define _Alignas(x) __declspec(align(x))
-#endif
-#endif
-
-#ifdef _MSC_VER
-#define __builtin_unreachable() __assume(false)
-#elif !((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 405 || \
-        defined(__clang__) || defined(__INTEL_COMPILER) ||    \
-        __has_builtin(__builtin_unreachable))
-#define __builtin_unreachable() \
-  for (;;) {                    \
-  }
-#endif
-
-#if (!defined(__llvm__) && !__has_builtin(__builtin_assume))
-#define __builtin_assume(x)    \
-  do {                         \
-    if (!(x))                  \
-      __builtin_unreachable(); \
-  } while (0)
-#endif
-
-#if __STDC_VERSION__ + 0 < 201112
-#define _Atomic(t) volatile t *
 #endif
 
 #ifdef __llvm__
@@ -103,10 +42,6 @@ typedef __CHAR32_TYPE__ char32_t;
 #endif
 #endif /* __cplusplus */
 
-#ifndef __COSMOCC__
-#include "libc/stdbool.h"
-#endif
-
 typedef int errno_t;
 typedef __SIZE_TYPE__ size_t;
 typedef __PTRDIFF_TYPE__ ssize_t;
@@ -125,6 +60,26 @@ typedef __INT64_TYPE__ int64_t;
 typedef __UINT64_TYPE__ uint64_t;
 typedef __INTMAX_TYPE__ intmax_t;
 typedef __UINTMAX_TYPE__ uintmax_t;
+
+/* TODO(jart): re-import compiler-rt once they have it */
+#if defined(__x86_64__) && defined(__FLT128_MAX_10_EXP__)
+#undef __FLT128_MAX_10_EXP__
+#undef __FLT128_DENORM_MIN__
+#undef __FLT128_MIN_EXP__
+#undef __FLT128_MIN_10_EXP__
+#undef __FLT128_MANT_DIG__
+#undef __FLT128_HAS_INFINITY__
+#undef __FLT128_EPSILON__
+#undef __FLT128_MAX_EXP__
+#undef __FLT128_HAS_DENORM__
+#undef __FLT128_DIG__
+#undef __FLT128_MIN__
+#undef __FLT128_MAX__
+#undef __FLT128_NORM_MAX__
+#undef __FLT128_HAS_QUIET_NAN__
+#undef __FLT128_IS_IEC_60559__
+#undef __FLT128_DECIMAL_DIG__
+#endif
 
 #define __DEFINED_max_align_t
 typedef long double max_align_t;
@@ -160,7 +115,6 @@ typedef struct {
   libcesque __wur returnsaligned((65536)) returnspointerwithnoaliases
 #define reallocesque libcesque returnsaligned((16))
 #define mallocesque  reallocesque returnspointerwithnoaliases
-#define interruptfn  nocallersavedregisters forcealignargpointer
 
 #ifndef pureconst
 #define pureconst __attribute__((__const__))
@@ -175,9 +129,8 @@ typedef struct {
 #define scanfesque(n)    __attribute__((__format__(__gnu_scanf__, n, n + 1)))
 #define strftimeesque(n) __attribute__((__format__(__strftime__, n, 0)))
 
-#ifndef privileged
-#define privileged \
-  _Section(".privileged") dontinline dontinstrument dontubsan dontasan
+#ifndef __privileged
+#define __privileged _Section(".privileged") dontinstrument dontubsan
 #endif
 
 #ifndef wontreturn
@@ -326,16 +279,6 @@ typedef struct {
 #define hasatleast
 #endif
 
-#if __STDC_VERSION__ + 0 < 199901L && !defined(restrict)
-#if !defined(__cplusplus) && \
-    ((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 301 || defined(_MSC_VER))
-#define restrict __restrict__
-#else
-#define restrict
-#define __restrict
-#endif
-#endif
-
 #ifndef dontcallback
 #if (__has_attribute(__leaf__) || \
      (!defined(__llvm__) &&       \
@@ -439,6 +382,24 @@ typedef struct {
 
 #define offsetof(type, member) __builtin_offsetof(type, member)
 
+#if defined(__GNUC__) && __GNUC__ >= 10
+#define __read_only(...) __attribute__((__access__(__read_only__, __VA_ARGS__)))
+#define __write_only(...) \
+  __attribute__((__access__(__write_only__, __VA_ARGS__)))
+#define __read_write(...) \
+  __attribute__((__access__(__read_write__, __VA_ARGS__)))
+#else
+#define __read_only(...)
+#define __write_only(...)
+#define __read_write(...)
+#endif
+
+#if defined(__GNUC__) && __GNUC__ >= 13
+#define __fd_arg(N) __attribute__((__fd_arg__(N)))
+#else
+#define __fd_arg(N)
+#endif
+
 #ifdef _COSMO_SOURCE
 
 #ifndef dontinstrument
@@ -523,13 +484,6 @@ typedef struct {
 #endif
 
 #if ((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 408 || \
-     __has_attribute(__no_sanitize_address__))
-#define dontasan __attribute__((__no_sanitize_address__))
-#else
-#define dontasan
-#endif
-
-#if ((__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 408 || \
      __has_attribute(__no_sanitize_undefined__))
 #define dontubsan __attribute__((__no_sanitize_undefined__))
 #else
@@ -602,11 +556,8 @@ typedef struct {
 
 #ifdef __aarch64__
 /* raise sigill (not sigtrap) like x86 does */
-#define __builtin_trap()     \
-  do {                       \
-    __asm__("udf\t#0x666");  \
-    __builtin_unreachable(); \
-  } while (0)
+#define __builtin_trap() \
+  (({ __asm__("udf\t#0x666"); }), __builtin_unreachable())
 #endif
 
 #endif /* _COSMO_SOURCE */

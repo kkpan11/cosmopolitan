@@ -24,7 +24,8 @@ THIRD_PARTY_UNZIP_A_DIRECTDEPS =						\
 	LIBC_STR								\
 	LIBC_SYSV								\
 	THIRD_PARTY_BZIP2							\
-	THIRD_PARTY_TZ
+	THIRD_PARTY_MUSL							\
+	THIRD_PARTY_TZ								\
 
 THIRD_PARTY_UNZIP_A_DEPS :=							\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_UNZIP_A_DIRECTDEPS),$($(x))))
@@ -53,6 +54,7 @@ $(THIRD_PARTY_UNZIP_A_OBJS): private						\
 			-w							\
 			-DUSE_BZIP2						\
 			-DUNICODE_SUPPORT					\
+			-DUTF8_MAYBE_NATIVE					\
 			-DHAVE_UNLINK						\
 			-DLARGE_FILE_SUPPORT					\
 			-DHAVE_TERMIOS_H					\

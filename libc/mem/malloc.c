@@ -17,8 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/mem/mem.h"
+#include "libc/str/str.h"
 #include "third_party/dlmalloc/dlmalloc.h"
-#ifndef __SANITIZE_ADDRESS__
+
+__static_yoink("free");
 
 /**
  * Allocates uninitialized memory.
@@ -41,7 +43,14 @@
  * @return new memory, or NULL w/ errno
  */
 void *malloc(size_t n) {
+#ifdef COSMO_MEM_DEBUG
+  return memalign(16, n);
+#elifdef MODE_DBG
+  char *p = dlmalloc(n);
+  if (p)
+    memset(p, 0xa5, dlmalloc_usable_size(p));
+  return p;
+#else
   return dlmalloc(n);
+#endif
 }
-
-#endif /* __SANITIZE_ADDRESS__ */

@@ -32,7 +32,7 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 #include "third_party/getopt/getopt.internal.h"
 
 static int infd;
@@ -44,12 +44,12 @@ static const char *inpath;
 static const char *outpath;
 static unsigned char *inmap;
 
-static wontreturn void Die(const char *path, const char *reason) {
+[[noreturn]] static void Die(const char *path, const char *reason) {
   tinyprint(2, path, ": ", reason, "\n", NULL);
   exit(1);
 }
 
-static wontreturn void SysDie(const char *path, const char *func) {
+[[noreturn]] static void SysDie(const char *path, const char *func) {
   const char *errstr;
   if (!(errstr = _strerdoc(errno)))
     errstr = "EUNKNOWN";
@@ -57,7 +57,7 @@ static wontreturn void SysDie(const char *path, const char *func) {
   exit(1);
 }
 
-static wontreturn void PrintUsage(int fd, int exitcode) {
+[[noreturn]] static void PrintUsage(int fd, int exitcode) {
   tinyprint(fd, "\
 NAME\n\
 \n\

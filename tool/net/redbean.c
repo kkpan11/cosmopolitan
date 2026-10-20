@@ -31,8 +31,11 @@
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/termios.h"
+#include "libc/cosmo.h"
+#include "libc/cosmotime.h"
+#include "libc/ctype.h"
 #include "libc/dce.h"
-#include "libc/dos.internal.h"
+#include "libc/dos.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
@@ -40,12 +43,12 @@
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/likely.h"
-#include "libc/intrin/nomultics.internal.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/nomultics.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/log/appendresourcereport.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/alloca.h"
 #include "libc/mem/gc.h"
@@ -57,7 +60,6 @@
 #include "libc/nt/enum/fileflagandattributes.h"
 #include "libc/runtime/clktck.h"
 #include "libc/runtime/internal.h"
-#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/serialize.h"
@@ -69,10 +71,12 @@
 #include "libc/stdio/hex.internal.h"
 #include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/locale.h"
 #include "libc/str/slice.h"
 #include "libc/str/str.h"
 #include "libc/str/strwidth.h"
 #include "libc/sysv/consts/af.h"
+#include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/clone.h"
@@ -83,7 +87,6 @@
 #include "libc/sysv/consts/hwcap.h"
 #include "libc/sysv/consts/inaddr.h"
 #include "libc/sysv/consts/ipproto.h"
-#include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/poll.h"
@@ -102,7 +105,7 @@
 #include "libc/thread/tls.h"
 #include "libc/x/x.h"
 #include "libc/x/xasprintf.h"
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 #include "net/http/escape.h"
 #include "net/http/http.h"
 #include "net/http/ip.h"
@@ -127,7 +130,6 @@
 #include "third_party/mbedtls/x509_crt.h"
 #include "third_party/musl/netdb.h"
 #include "third_party/zlib/zlib.h"
-#include "tool/args/args.h"
 #include "tool/build/lib/case.h"
 #include "tool/net/lfinger.h"
 #include "tool/net/lfuncs.h"
@@ -137,8 +139,6 @@
 #include "tool/net/sandbox.h"
 
 #pragma GCC diagnostic ignored "-Wunused-variable"
-
-STATIC_STACK_ALIGN(GetStackSize());
 
 __static_yoink("zipos");
 
@@ -169,9 +169,9 @@ __static_yoink("blink_xnu_aarch64");    // is apple silicon
 #define REDBEAN "redbean"
 #endif
 
-#define VERSION          0x020200
+//                         XXYYZZ
+#define VERSION          0x030000
 #define HASH_LOAD_FACTOR /* 1. / */ 4
-#define MONITOR_MICROS   150000
 #define READ(F, P, N)    readv(F, &(struct iovec){P, N}, 1)
 #define WRITE(F, P, N)   writev(F, &(struct iovec){P, N}, 1)
 #define AppendCrlf(P)    mempcpy(P, "\r\n", 2)
@@ -180,12 +180,8 @@ __static_yoink("blink_xnu_aarch64");    // is apple silicon
 #define HeaderLength(H)  (cpm.msg.headers[H].b - cpm.msg.headers[H].a)
 #define HeaderEqualCase(H, S) \
   SlicesEqualCase(S, strlen(S), HeaderData(H), HeaderLength(H))
-#define LockInc(P)                                            \
-  atomic_fetch_add_explicit((_Atomic(typeof(*(P))) *)(P), +1, \
-                            memory_order_relaxed)
-#define LockDec(P)                                            \
-  atomic_fetch_add_explicit((_Atomic(typeof(*(P))) *)(P), -1, \
-                            memory_order_relaxed)
+#define LockInc(P) atomic_fetch_add_explicit(P, +1, memory_order_relaxed)
+#define LockDec(P) atomic_fetch_add_explicit(P, -1, memory_order_relaxed)
 
 #define TRACE_BEGIN         \
   do {                      \
@@ -259,7 +255,7 @@ struct Strings {
   struct String {
     size_t n;
     const char *s;
-  } *p;
+  } * p;
 };
 
 struct DeflateGenerator {
@@ -287,7 +283,7 @@ static struct Servers {
   struct Server {
     int fd;
     struct sockaddr_in addr;
-  } *p;
+  } * p;
 } servers;
 
 static struct Freelist {
@@ -301,7 +297,7 @@ static struct Unmaplist {
     int f;
     void *p;
     size_t n;
-  } *p;
+  } * p;
 } unmaplist;
 
 static struct Psks {
@@ -312,7 +308,7 @@ static struct Psks {
     char *identity;
     size_t identity_len;
     char *s;
-  } *p;
+  } * p;
 } psks;
 
 static struct Suites {
@@ -320,18 +316,13 @@ static struct Suites {
   uint16_t *p;
 } suites;
 
-static struct Certs {
-  size_t n;
-  struct Cert *p;
-} certs;
-
 static struct Redirects {
   size_t n;
   struct Redirect {
     int code;
     struct String path;
     struct String location;
-  } *p;
+  } * p;
 } redirects;
 
 static struct Assets {
@@ -346,8 +337,8 @@ static struct Assets {
     struct File {
       struct String path;
       struct stat st;
-    } *file;
-  } *p;
+    } * file;
+  } * p;
 } assets;
 
 static struct TrustedIps {
@@ -355,7 +346,7 @@ static struct TrustedIps {
   struct TrustedIp {
     uint32_t ip;
     uint32_t mask;
-  } *p;
+  } * p;
 } trustedips;
 
 struct TokenBucket {
@@ -376,20 +367,22 @@ struct Blackhole {
 } blackhole;
 
 static struct Shared {
-  int workers;
-  struct timespec nowish;
-  struct timespec lastreindex;
+  _Atomic(int) workers;
   struct timespec lastmeltdown;
+  struct timespec nowish;
   char currentdate[32];
   struct rusage server;
   struct rusage children;
   struct Counters {
-#define C(x) long x;
+#define C(x) _Atomic(long) x;
 #include "tool/net/counters.inc"
 #undef C
   } c;
-  pthread_spinlock_t montermlock;
-} *shared;
+  pthread_mutex_t datetime_mu;
+  pthread_mutex_t server_mu;
+  pthread_mutex_t children_mu;
+  pthread_mutex_t lastmeltdown_mu;
+} * shared;
 
 static const char kCounterNames[] =
 #define C(x) #x "\0"
@@ -477,7 +470,6 @@ static int oldloglevel;
 static int messageshandled;
 static int sslticketlifetime;
 static uint32_t clientaddrsize;
-static atomic_int terminatemonitor;
 
 static char *brand;
 static size_t zsize;
@@ -491,6 +483,7 @@ static reader_f reader;
 static writer_f writer;
 static char *extrahdrs;
 static const char *zpath;
+static struct Certs certs;
 static char *serverheader;
 static char gzip_footer[8];
 static long maxpayloadsize;
@@ -501,13 +494,11 @@ static struct pollfd *polls;
 static size_t payloadlength;
 static int64_t cacheseconds;
 static char *cachedirective;
-static const char *monitortty;
 static struct Strings stagedirs;
 static struct Strings hidepaths;
 static const char *launchbrowser;
 static const char ctIdx = 'c';  // a pseudo variable to get address of
 
-static pthread_t monitorth;
 static struct Buffer inbuf_actual;
 static struct Buffer inbuf;
 static struct Buffer oldin;
@@ -673,15 +664,13 @@ static long FindRedirect(const char *s, size_t n) {
   return -1;
 }
 
-static mbedtls_x509_crt *GetTrustedCertificate(mbedtls_x509_name *name) {
-  size_t i;
-  for (i = 0; i < certs.n; ++i) {
-    if (certs.p[i].cert &&
-        !mbedtls_x509_name_cmp(name, &certs.p[i].cert->subject)) {
-      return certs.p[i].cert;
-    }
-  }
-  return 0;
+static bool IsDirectory(const char *path) {
+  int e = errno;
+  struct stat st;
+  if (!fstatat(AT_FDCWD, path, &st, AT_SYMLINK_NOFOLLOW))
+    return S_ISDIR(st.st_mode);
+  errno = e;
+  return false;
 }
 
 static void UseCertificate(mbedtls_ssl_config *c, struct Cert *kp,
@@ -692,123 +681,13 @@ static void UseCertificate(mbedtls_ssl_config *c, struct Cert *kp,
   CHECK_EQ(0, mbedtls_ssl_conf_own_cert(c, kp->cert, kp->key));
 }
 
-static void AppendCert(mbedtls_x509_crt *cert, mbedtls_pk_context *key) {
-  certs.p = realloc(certs.p, ++certs.n * sizeof(*certs.p));
-  certs.p[certs.n - 1].cert = cert;
-  certs.p[certs.n - 1].key = key;
-}
-
-static void InternCertificate(mbedtls_x509_crt *cert, mbedtls_x509_crt *prev) {
-  int r;
-  size_t i;
-  if (cert->next)
-    InternCertificate(cert->next, cert);
-  if (prev) {
-    if (mbedtls_x509_crt_check_parent(prev, cert, 1)) {
-      DEBUGF("(ssl) unbundling %`'s from %`'s",
-             gc(FormatX509Name(&prev->subject)),
-             gc(FormatX509Name(&cert->subject)));
-      prev->next = 0;
-    } else if ((r = mbedtls_x509_crt_check_signature(prev, cert, 0))) {
-      WARNF("(ssl) invalid signature for %`'s -> %`'s (-0x%04x)",
-            gc(FormatX509Name(&prev->subject)),
-            gc(FormatX509Name(&cert->subject)), -r);
-    }
-  }
-  if (mbedtls_x509_time_is_past(&cert->valid_to)) {
-    WARNF("(ssl) certificate %`'s is expired",
-          gc(FormatX509Name(&cert->subject)));
-  } else if (mbedtls_x509_time_is_future(&cert->valid_from)) {
-    WARNF("(ssl) certificate %`'s is from the future",
-          gc(FormatX509Name(&cert->subject)));
-  }
-  for (i = 0; i < certs.n; ++i) {
-    if (!certs.p[i].cert && certs.p[i].key &&
-        !mbedtls_pk_check_pair(&cert->pk, certs.p[i].key)) {
-      certs.p[i].cert = cert;
-      return;
-    }
-  }
-  LogCertificate("loaded certificate", cert);
-  if (!cert->next && !IsSelfSigned(cert) && cert->max_pathlen) {
-    for (i = 0; i < certs.n; ++i) {
-      if (!certs.p[i].cert)
-        continue;
-      if (mbedtls_pk_can_do(&cert->pk, certs.p[i].cert->sig_pk) &&
-          !mbedtls_x509_crt_check_parent(cert, certs.p[i].cert, 1) &&
-          !IsSelfSigned(certs.p[i].cert)) {
-        if (ChainCertificate(cert, certs.p[i].cert))
-          break;
-      }
-    }
-  }
-  if (!IsSelfSigned(cert)) {
-    for (i = 0; i < certs.n; ++i) {
-      if (!certs.p[i].cert)
-        continue;
-      if (certs.p[i].cert->next)
-        continue;
-      if (certs.p[i].cert->max_pathlen &&
-          mbedtls_pk_can_do(&certs.p[i].cert->pk, cert->sig_pk) &&
-          !mbedtls_x509_crt_check_parent(certs.p[i].cert, cert, 1)) {
-        ChainCertificate(certs.p[i].cert, cert);
-      }
-    }
-  }
-  AppendCert(cert, 0);
-}
-
-static void ProgramCertificate(const char *p, size_t n) {
-  int rc;
-  unsigned char *waqapi;
-  mbedtls_x509_crt *cert;
-  waqapi = malloc(n + 1);
-  memcpy(waqapi, p, n);
-  waqapi[n] = 0;
-  cert = calloc(1, sizeof(mbedtls_x509_crt));
-  rc = mbedtls_x509_crt_parse(cert, waqapi, n + 1);
-  mbedtls_platform_zeroize(waqapi, n);
-  free(waqapi);
-  if (rc < 0) {
-    WARNF("(ssl) failed to load certificate (grep -0x%04x)", rc);
-    return;
-  } else if (rc > 0) {
-    VERBOSEF("(ssl) certificate bundle partially loaded");
-  }
-  InternCertificate(cert, 0);
-}
-
-static void ProgramPrivateKey(const char *p, size_t n) {
-  int rc;
-  size_t i;
-  unsigned char *waqapi;
-  mbedtls_pk_context *key;
-  waqapi = malloc(n + 1);
-  memcpy(waqapi, p, n);
-  waqapi[n] = 0;
-  key = calloc(1, sizeof(mbedtls_pk_context));
-  rc = mbedtls_pk_parse_key(key, waqapi, n + 1, 0, 0);
-  mbedtls_platform_zeroize(waqapi, n);
-  free(waqapi);
-  if (rc != 0)
-    FATALF("(ssl) error: load key (grep -0x%04x)", -rc);
-  for (i = 0; i < certs.n; ++i) {
-    if (certs.p[i].cert && !certs.p[i].key &&
-        !mbedtls_pk_check_pair(&certs.p[i].cert->pk, key)) {
-      certs.p[i].key = key;
-      return;
-    }
-  }
-  VERBOSEF("(ssl) loaded private key");
-  AppendCert(0, key);
-}
-
-static void ProgramFile(const char *path, void program(const char *, size_t)) {
+static void ProgramFile(const char *path,
+                        void program(struct Certs *, const char *, size_t)) {
   char *p;
   size_t n;
   DEBUGF("(srvr) ProgramFile(%`'s)", path);
   if ((p = xslurp(path, &n))) {
-    program(p, n);
+    program(&certs, p, n);
     mbedtls_platform_zeroize(p, n);
     free(p);
   } else {
@@ -1352,8 +1231,8 @@ static void CallSimpleHookIfDefined(const char *s) {
 }
 
 static void ReportWorkerExit(int pid, int ws) {
-  int workers;
-  workers = atomic_fetch_sub(&shared->workers, 1) - 1;
+  int workers =
+      atomic_fetch_sub_explicit(&shared->workers, 1, memory_order_release);
   if (WIFEXITED(ws)) {
     if (WEXITSTATUS(ws)) {
       LockInc(&shared->c.failedchildren);
@@ -1385,7 +1264,9 @@ static void ReportWorkerResources(int pid, struct rusage *ru) {
 
 static void HandleWorkerExit(int pid, int ws, struct rusage *ru) {
   LockInc(&shared->c.connectionshandled);
+  unassert(!pthread_mutex_lock(&shared->children_mu));
   rusage_add(&shared->children, ru);
+  unassert(!pthread_mutex_unlock(&shared->children_mu));
   ReportWorkerExit(pid, ws);
   ReportWorkerResources(pid, ru);
   if (hasonprocessdestroy) {
@@ -1703,112 +1584,13 @@ static void PsksDestroy(void) {
   psks.n = 0;
 }
 
-static void CertsDestroy(void) {
-  size_t i;
-  // break up certificate chains to prevent double free
-  for (i = 0; i < certs.n; ++i) {
-    if (certs.p[i].cert) {
-      certs.p[i].cert->next = 0;
-    }
-  }
-  for (i = 0; i < certs.n; ++i) {
-    mbedtls_x509_crt_free(certs.p[i].cert);
-    free(certs.p[i].cert);
-    mbedtls_pk_free(certs.p[i].key);
-    free(certs.p[i].key);
-  }
-  Free(&certs.p);
-  certs.n = 0;
-}
-
 static void WipeServingKeys(void) {
   if (uniprocess)
     return;
   mbedtls_ssl_ticket_free(&ssltick);
   mbedtls_ssl_key_cert_free(conf.key_cert), conf.key_cert = 0;
-  CertsDestroy();
+  CertsDestroy(&certs);
   PsksDestroy();
-}
-
-static bool CertHasCommonName(const mbedtls_x509_crt *cert, const void *s,
-                              size_t n) {
-  const mbedtls_x509_name *name;
-  for (name = &cert->subject; name; name = name->next) {
-    if (!MBEDTLS_OID_CMP(MBEDTLS_OID_AT_CN, &name->oid)) {
-      if (SlicesEqualCase(s, n, name->val.p, name->val.len)) {
-        return true;
-      }
-      break;
-    }
-  }
-  return false;
-}
-
-static bool TlsRouteFind(mbedtls_pk_type_t type, mbedtls_ssl_context *ssl,
-                         const unsigned char *host, size_t size, int64_t ip) {
-  int i;
-  for (i = 0; i < certs.n; ++i) {
-    if (IsServerCert(certs.p + i, type) &&
-        (((certs.p[i].cert->ext_types & MBEDTLS_X509_EXT_SUBJECT_ALT_NAME) &&
-          (ip == -1 ? CertHasHost(certs.p[i].cert, host, size)
-                    : CertHasIp(certs.p[i].cert, ip))) ||
-         CertHasCommonName(certs.p[i].cert, host, size))) {
-      CHECK_EQ(
-          0, mbedtls_ssl_set_hs_own_cert(ssl, certs.p[i].cert, certs.p[i].key));
-      DEBUGF("(ssl) TlsRoute(%s, %`'.*s) %s %`'s", mbedtls_pk_type_name(type),
-             size, host, mbedtls_pk_get_name(&certs.p[i].cert->pk),
-             gc(FormatX509Name(&certs.p[i].cert->subject)));
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool TlsRouteFirst(mbedtls_pk_type_t type, mbedtls_ssl_context *ssl) {
-  int i;
-  for (i = 0; i < certs.n; ++i) {
-    if (IsServerCert(certs.p + i, type)) {
-      CHECK_EQ(
-          0, mbedtls_ssl_set_hs_own_cert(ssl, certs.p[i].cert, certs.p[i].key));
-      DEBUGF("(ssl) TlsRoute(%s) %s %`'s", mbedtls_pk_type_name(type),
-             mbedtls_pk_get_name(&certs.p[i].cert->pk),
-             gc(FormatX509Name(&certs.p[i].cert->subject)));
-      return true;
-    }
-  }
-  return false;
-}
-
-static int TlsRoute(void *ctx, mbedtls_ssl_context *ssl,
-                    const unsigned char *host, size_t size) {
-  int64_t ip;
-  bool ok1, ok2;
-  ip = ParseIp((const char *)host, size);
-  ok1 = TlsRouteFind(MBEDTLS_PK_ECKEY, ssl, host, size, ip);
-  ok2 = TlsRouteFind(MBEDTLS_PK_RSA, ssl, host, size, ip);
-  if (!ok1 && !ok2) {
-    WARNF("(ssl) TlsRoute(%`'.*s) not found", size, host);
-    ok1 = TlsRouteFirst(MBEDTLS_PK_ECKEY, ssl);
-    ok2 = TlsRouteFirst(MBEDTLS_PK_RSA, ssl);
-  }
-  return ok1 || ok2 ? 0 : -1;
-}
-
-static int TlsRoutePsk(void *ctx, mbedtls_ssl_context *ssl,
-                       const unsigned char *identity, size_t identity_len) {
-  size_t i;
-  for (i = 0; i < psks.n; ++i) {
-    if (SlicesEqual((void *)identity, identity_len, psks.p[i].identity,
-                    psks.p[i].identity_len)) {
-      DEBUGF("(ssl) TlsRoutePsk(%`'.*s)", identity_len, identity);
-      mbedtls_ssl_set_hs_psk(ssl, psks.p[i].key, psks.p[i].key_len);
-      // keep track of selected psk to report its identity
-      sslpskindex = i + 1;  // use index+1 to check against 0 (when not set)
-      return 0;
-    }
-  }
-  WARNF("(ssl) TlsRoutePsk(%`'.*s) not found", identity_len, identity);
-  return -1;
 }
 
 static bool TlsSetup(void) {
@@ -2098,7 +1880,7 @@ static void LoadCertificates(void) {
     if (!haveclientcert && ksk.key) {
       UseCertificate(&confcli, &ecp, "client");
     }
-    AppendCert(ecp.cert, ecp.key);
+    AppendCert(&certs, ecp.cert, ecp.key);
 #endif
 #ifdef MBEDTLS_RSA_C
     if (!norsagen) {
@@ -2108,7 +1890,7 @@ static void LoadCertificates(void) {
       if (!haveclientcert && ksk.key) {
         UseCertificate(&confcli, &rsa, "client");
       }
-      AppendCert(rsa.cert, rsa.key);
+      AppendCert(&certs, rsa.cert, rsa.key);
     }
 #endif
   }
@@ -2131,9 +1913,11 @@ static void UpdateCurrentDate(struct timespec now) {
   int64_t t;
   struct tm tm;
   t = now.tv_sec;
-  shared->nowish = now;
   gmtime_r(&t, &tm);
+  unassert(!pthread_mutex_lock(&shared->datetime_mu));
+  shared->nowish = now;
   FormatHttpDateTime(shared->currentdate, &tm);
+  unassert(!pthread_mutex_unlock(&shared->datetime_mu));
 }
 
 static int64_t GetGmtOffset(int64_t t) {
@@ -2278,7 +2062,7 @@ static struct Asset *GetAssetZip(const char *path, size_t pathlen) {
   hash = Hash(path, pathlen);
   for (step = 0;; ++step) {
     i = (hash + ((step * (step + 1)) >> 1)) & (assets.n - 1);
-    if (!assets.p[i].hash)
+    if (i >= assets.n || !assets.p || !assets.p[i].hash)
       return NULL;
     if (hash == assets.p[i].hash &&
         pathlen == ZIP_CFILE_NAMESIZE(zmap + assets.p[i].cf) &&
@@ -2366,7 +2150,10 @@ static char *AppendCache(char *p, int64_t seconds, char *directive) {
     p = stpcpy(p, directive);
   }
   p = AppendCrlf(p);
-  return AppendExpires(p, shared->nowish.tv_sec + seconds);
+  unassert(!pthread_mutex_lock(&shared->datetime_mu));
+  long nowish_sec = shared->nowish.tv_sec;
+  unassert(!pthread_mutex_unlock(&shared->datetime_mu));
+  return AppendExpires(p, nowish_sec + seconds);
 }
 
 static inline char *AppendContentLength(char *p, size_t n) {
@@ -2457,7 +2244,7 @@ static void *LoadAsset(struct Asset *a, size_t *out_size) {
   }
 }
 
-static wontreturn void PrintUsage(int fd, int rc) {
+[[noreturn]] static void PrintUsage(int fd, int rc) {
   size_t n;
   const char *p;
   struct Asset *a;
@@ -2549,7 +2336,7 @@ static char *CommitOutput(char *p) {
 
 static char *ServeDefaultErrorPage(char *p, unsigned code, const char *reason,
                                    const char *details) {
-  p = AppendContentType(p, "text/html; charset=ISO-8859-1");
+  p = AppendContentType(p, "text/html; charset=UTF-8");
   reason = FreeLater(EscapeHtml(reason, -1, 0));
   appends(&cpm.outbuf, "\
 <!doctype html>\r\n\
@@ -2622,7 +2409,8 @@ static char *ServeErrorImpl(unsigned code, const char *reason,
     lua_getglobal(L, "OnError");
     lua_pushinteger(L, code);
     lua_pushstring(L, reason);
-    if (LuaCallWithTrace(L, 2, 0, NULL) == LUA_OK) {
+    lua_pushstring(L, details);
+    if (LuaCallWithTrace(L, 3, 0, NULL) == LUA_OK) {
       return CommitOutput(GetLuaResponse());
     } else {
       return ServeErrorImplDefault(code, reason, details);
@@ -3104,9 +2892,12 @@ td { padding-right: 3em; }\r\n\
 <td valign=\"top\">\r\n\
 <a href=\"/statusz\">/statusz</a>\r\n\
 ");
-  if (shared->c.connectionshandled) {
+  if (atomic_load_explicit(&shared->c.connectionshandled,
+                           memory_order_acquire)) {
     appends(&cpm.outbuf, "says your redbean<br>\r\n");
+    unassert(!pthread_mutex_lock(&shared->children_mu));
     AppendResourceReport(&cpm.outbuf, &shared->children, "<br>\r\n");
+    unassert(!pthread_mutex_unlock(&shared->children_mu));
   }
   appends(&cpm.outbuf, "<td valign=\"top\">\r\n");
   and = "";
@@ -3128,12 +2919,12 @@ td { padding-right: 3em; }\r\n\
   }
   appendf(&cpm.outbuf, "%s%,ld second%s of operation<br>\r\n", and, y.rem,
           y.rem == 1 ? "" : "s");
-  x = shared->c.messageshandled;
+  x = atomic_load_explicit(&shared->c.messageshandled, memory_order_relaxed);
   appendf(&cpm.outbuf, "%,ld message%s handled<br>\r\n", x, x == 1 ? "" : "s");
-  x = shared->c.connectionshandled;
+  x = atomic_load_explicit(&shared->c.connectionshandled, memory_order_relaxed);
   appendf(&cpm.outbuf, "%,ld connection%s handled<br>\r\n", x,
           x == 1 ? "" : "s");
-  x = shared->workers;
+  x = atomic_load_explicit(&shared->workers, memory_order_relaxed);
   appendf(&cpm.outbuf, "%,ld connection%s active<br>\r\n", x,
           x == 1 ? "" : "s");
   appends(&cpm.outbuf, "</table>\r\n");
@@ -3185,11 +2976,11 @@ static void AppendRusage(const char *a, struct rusage *ru) {
 }
 
 static void ServeCounters(void) {
-  const long *c;
+  const _Atomic(long) *c;
   const char *s;
-  for (c = (const long *)&shared->c, s = kCounterNames; *s;
+  for (c = (const _Atomic(long) *)&shared->c, s = kCounterNames; *s;
        ++c, s += strlen(s) + 1) {
-    AppendLong1(s, *c);
+    AppendLong1(s, atomic_load_explicit(c, memory_order_relaxed));
   }
 }
 
@@ -3202,12 +2993,17 @@ static char *ServeStatusz(void) {
   AppendLong1("pid", getpid());
   AppendLong1("ppid", getppid());
   AppendLong1("now", timespec_real().tv_sec);
+  unassert(!pthread_mutex_lock(&shared->datetime_mu));
   AppendLong1("nowish", shared->nowish.tv_sec);
+  unassert(!pthread_mutex_unlock(&shared->datetime_mu));
   AppendLong1("gmtoff", gmtoff);
   AppendLong1("CLK_TCK", CLK_TCK);
   AppendLong1("startserver", startserver.tv_sec);
+  unassert(!pthread_mutex_lock(&shared->lastmeltdown_mu));
   AppendLong1("lastmeltdown", shared->lastmeltdown.tv_sec);
-  AppendLong1("workers", shared->workers);
+  unassert(!pthread_mutex_unlock(&shared->lastmeltdown_mu));
+  AppendLong1("workers",
+              atomic_load_explicit(&shared->workers, memory_order_relaxed));
   AppendLong1("assets.n", assets.n);
 #ifndef STATIC
   lua_State *L = GL;
@@ -3215,8 +3011,12 @@ static char *ServeStatusz(void) {
               lua_gc(L, LUA_GCCOUNT) * 1024 + lua_gc(L, LUA_GCCOUNTB));
 #endif
   ServeCounters();
+  unassert(!pthread_mutex_lock(&shared->server_mu));
   AppendRusage("server", &shared->server);
+  unassert(!pthread_mutex_unlock(&shared->server_mu));
+  unassert(!pthread_mutex_lock(&shared->children_mu));
   AppendRusage("children", &shared->children);
+  unassert(!pthread_mutex_unlock(&shared->children_mu));
   p = SetStatus(200, "OK");
   p = AppendContentType(p, "text/plain");
   if (cpm.msg.version >= 11) {
@@ -3887,7 +3687,7 @@ static void StorePath(const char *dirpath) {
   DIR *d;
   char *path;
   struct dirent *e;
-  if (!isdirectory(dirpath) && !endswith(dirpath, "/")) {
+  if (!IsDirectory(dirpath) && !endswith(dirpath, "/")) {
     return StoreFile(dirpath);
   }
   if (!(d = opendir(dirpath)))
@@ -3981,7 +3781,9 @@ static int LuaNilTlsError(lua_State *L, const char *s, int r) {
 #include "tool/net/fetch.inc"
 
 static int LuaGetDate(lua_State *L) {
+  unassert(!pthread_mutex_lock(&shared->datetime_mu));
   lua_pushinteger(L, shared->nowish.tv_sec);
+  unassert(!pthread_mutex_unlock(&shared->datetime_mu));
   return 1;
 }
 
@@ -4708,7 +4510,7 @@ static int LuaProgramPrivateKey(lua_State *L) {
   const char *p;
   OnlyCallFromInitLua(L, "ProgramPrivateKey");
   p = luaL_checklstring(L, 1, &n);
-  ProgramPrivateKey(p, n);
+  ProgramPrivateKey(&certs, p, n);
   return 0;
 }
 
@@ -4717,7 +4519,7 @@ static int LuaProgramCertificate(lua_State *L) {
   const char *p;
   OnlyCallFromInitLua(L, "ProgramCertificate");
   p = luaL_checklstring(L, 1, &n);
-  ProgramCertificate(p, n);
+  ProgramCertificate(&certs, p, n);
   return 0;
 }
 
@@ -4905,7 +4707,7 @@ static int LuaBlackhole(lua_State *L) {
 static void BlockSignals(void) {
 }
 
-wontreturn static void Replenisher(void) {
+[[noreturn]] static void Replenisher(void) {
   struct timespec ts;
   VERBOSEF("(token) replenish worker started");
   strace_enabled(-1);
@@ -5024,7 +4826,7 @@ static int LuaProgramTokenBucket(lua_State *L) {
       VERBOSEF("(token) please run the blackholed program; see our website!");
     }
   }
-  tokenbucket.b = _mapshared(ROUNDUP(1ul << cidr, FRAMESIZE));
+  tokenbucket.b = _mapshared(ROUNDUP(1ul << cidr, getgransize()));
   memset(tokenbucket.b, 127, 1ul << cidr);
   tokenbucket.cidr = cidr;
   tokenbucket.reject = reject;
@@ -5035,7 +4837,7 @@ static int LuaProgramTokenBucket(lua_State *L) {
   npassert(pid != -1);
   if (!pid)
     Replenisher();
-  ++shared->workers;
+  atomic_fetch_add_explicit(&shared->workers, 1, memory_order_acquire);
   return 0;
 }
 
@@ -5369,6 +5171,7 @@ static const luaL_Reg kLuaFuncs[] = {
     {"Uncompress", LuaUncompress},                              //
     {"Underlong", LuaUnderlong},                                //
     {"UuidV4", LuaUuidV4},                                      //
+    {"UuidV7", LuaUuidV7},                                      //
     {"VisualizeControlCodes", LuaVisualizeControlCodes},        //
     {"Write", LuaWrite},                                        //
     {"bin", LuaBin},                                            //
@@ -5679,7 +5482,8 @@ static void LogClose(const char *reason) {
   if (amtread || meltdown || killed) {
     LockInc(&shared->c.fumbles);
     INFOF("(stat) %s %s with %,ld unprocessed and %,d handled (%,d workers)",
-          DescribeClient(), reason, amtread, messageshandled, shared->workers);
+          DescribeClient(), reason, amtread, messageshandled,
+          atomic_load_explicit(&shared->workers, memory_order_relaxed));
   } else {
     DEBUGF("(stat) %s %s with %,d messages handled", DescribeClient(), reason,
            messageshandled);
@@ -5737,14 +5541,18 @@ Content-Length: 22\r\n\
 }
 
 static void EnterMeltdownMode(void) {
+  unassert(!pthread_mutex_lock(&shared->lastmeltdown_mu));
   if (timespec_cmp(timespec_sub(timespec_real(), shared->lastmeltdown),
                    (struct timespec){1}) < 0) {
+    unassert(!pthread_mutex_unlock(&shared->lastmeltdown_mu));
     return;
   }
-  WARNF("(srvr) server is melting down (%,d workers)", shared->workers);
-  LOGIFNEG1(kill(0, SIGUSR2));
   shared->lastmeltdown = timespec_real();
-  ++shared->c.meltdowns;
+  pthread_mutex_unlock(&shared->lastmeltdown_mu);
+  WARNF("(srvr) server is melting down (%,d workers)",
+        atomic_load_explicit(&shared->workers, memory_order_relaxed));
+  LOGIFNEG1(kill(0, SIGUSR2));
+  LockInc(&shared->c.meltdowns);
 }
 
 static char *HandlePayloadDisconnect(void) {
@@ -5861,7 +5669,9 @@ static void HandleHeartbeat(void) {
   size_t i;
   UpdateCurrentDate(timespec_real());
   Reindex();
+  unassert(!pthread_mutex_lock(&shared->server_mu));
   getrusage(RUSAGE_SELF, &shared->server);
+  unassert(!pthread_mutex_unlock(&shared->server_mu));
 #ifndef STATIC
   CallSimpleHookIfDefined("OnServerHeartbeat");
   CollectGarbage();
@@ -6298,7 +6108,7 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
                  IsNoCompressExt(a->file->path.s, a->file->path.n)) &&
                ((cpm.contentlength >= 100 && startswithi(ct, "text/")) ||
                 (cpm.contentlength >= 1000 &&
-                 MeasureEntropy(cpm.content, 1000) < 7))) {
+                 cosmo_entropy(cpm.content, 1000) < 7))) {
       VERBOSEF("serving compressed asset");
       p = ServeAssetCompressed(a);
     } else {
@@ -6481,7 +6291,9 @@ static bool HandleMessageActual(void) {
     DEBUGF("(clnt) could not synchronize message stream");
   }
   if (cpm.msg.version >= 10) {
+    unassert(!pthread_mutex_lock(&shared->datetime_mu));
     p = AppendCrlf(stpcpy(stpcpy(p, "Date: "), shared->currentdate));
+    unassert(!pthread_mutex_unlock(&shared->datetime_mu));
     if (!cpm.branded)
       p = stpcpy(p, serverheader);
     if (extrahdrs)
@@ -6676,13 +6488,6 @@ static int ExitWorker(void) {
     isexitingworker = true;
     return eintr();
   }
-  if (monitortty) {
-    terminatemonitor = true;
-    if (monitorth) {
-      pthread_join(monitorth, 0);
-      monitorth = 0;
-    }
-  }
   LuaDestroy();
   _Exit(0);
 }
@@ -6712,169 +6517,6 @@ static int EnableSandbox(void) {
       DEBUGF("(stat) applying '%s' sandbox policy", "contained");
       UnveilRedbean();
       return pledge("stdio", 0);
-  }
-}
-
-static void *MemoryMonitor(void *arg) {
-  static struct termios oldterm;
-  static int tty;
-  sigset_t ss;
-  bool ok;
-  size_t intervals;
-  struct winsize ws;
-  unsigned char rez;
-  struct termios term;
-  char *b, *addr;
-  struct MemoryInterval *mi, *mi2;
-  long i, j, gen, pages;
-  int rc, id, color, color2, workers;
-  id = atomic_load_explicit(&shared->workers, memory_order_relaxed);
-  DEBUGF("(memv) started for pid %d on tid %d", getpid(), gettid());
-
-  sigemptyset(&ss);
-  sigaddset(&ss, SIGHUP);
-  sigaddset(&ss, SIGINT);
-  sigaddset(&ss, SIGQUIT);
-  sigaddset(&ss, SIGTERM);
-  sigaddset(&ss, SIGPIPE);
-  sigaddset(&ss, SIGUSR1);
-  sigaddset(&ss, SIGUSR2);
-  sigprocmask(SIG_BLOCK, &ss, 0);
-
-  pthread_spin_lock(&shared->montermlock);
-  if (!id) {
-    if ((tty = open(monitortty, O_RDWR | O_NOCTTY)) != -1) {
-      tcgetattr(tty, &oldterm);
-      term = oldterm;
-      term.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-      term.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-      term.c_oflag |= OPOST | ONLCR;
-      term.c_iflag |= IUTF8;
-      term.c_cflag |= CS8;
-      term.c_cc[VMIN] = 1;
-      term.c_cc[VTIME] = 0;
-      tcsetattr(tty, TCSANOW, &term);
-      WRITE(tty, "\e[?25l", 6);
-    }
-  }
-  pthread_spin_unlock(&shared->montermlock);
-
-  if (tty != -1) {
-    for (gen = 0, mi = 0, b = 0; !terminatemonitor;) {
-      workers = atomic_load_explicit(&shared->workers, memory_order_relaxed);
-      if (id)
-        id = MAX(1, MIN(id, workers));
-      if (!id && workers) {
-        usleep(50000);
-        continue;
-      }
-
-      ++gen;
-      intervals = atomic_load_explicit(&_mmi.i, memory_order_relaxed);
-      if ((mi2 = realloc(mi, (intervals += 3) * sizeof(*mi)))) {
-        mi = mi2;
-        mi[0].x = (intptr_t)__executable_start >> 16;
-        mi[0].size = _etext - __executable_start;
-        mi[0].flags = 0;
-        mi[1].x = (intptr_t)_etext >> 16;
-        mi[1].size = _edata - _etext;
-        mi[1].flags = 0;
-        mi[2].x = (intptr_t)_edata >> 16;
-        mi[2].size = _end - _edata;
-        mi[2].flags = 0;
-        __mmi_lock();
-        if (_mmi.i == intervals - 3) {
-          memcpy(mi + 3, _mmi.p, _mmi.i * sizeof(*mi));
-          ok = true;
-        } else {
-          ok = false;
-        }
-        __mmi_unlock();
-        if (!ok) {
-          VERBOSEF("(memv) retrying due to contention on mmap table");
-          continue;
-        }
-
-        ws.ws_col = 80;
-        ws.ws_row = 40;
-        tcgetwinsize(tty, &ws);
-
-        appendr(&b, 0);
-        appends(&b, "\e[H\e[1m");
-
-        for (i = 0; i < intervals; ++i) {
-          addr = (char *)((int64_t)((uint64_t)mi[i].x << 32) >> 16);
-          color = 0;
-          appendf(&b, "\e[0m%lx", addr);
-          int pagesz = getauxval(AT_PAGESZ);
-          pages = (mi[i].size + pagesz - 1) / pagesz;
-          for (j = 0; j < pages; ++j) {
-            rc = mincore(addr + j * pagesz, pagesz, &rez);
-            if (!rc) {
-              if (rez & 1) {
-                if (mi[i].flags & MAP_SHARED) {
-                  color2 = 105;
-                } else {
-                  color2 = 42;
-                }
-              } else {
-                color2 = 41;
-              }
-            } else {
-              errno = 0;
-              color2 = 0;
-            }
-            if (color != color2) {
-              color = color2;
-              appendf(&b, "\e[%dm", color);
-            }
-            if (mi[i].flags & MAP_ANONYMOUS) {
-              appendw(&b, ' ');
-            } else {
-              appendw(&b, '/');
-            }
-          }
-        }
-
-        appendf(&b,
-                "\e[0m ID=%d PID=%d WS=%dx%d WORKERS=%d MODE=" MODE
-                " GEN=%ld\e[J",
-                id, getpid(), ws.ws_col, ws.ws_row, workers, gen);
-
-        pthread_spin_lock(&shared->montermlock);
-        WRITE(tty, b, appendz(b).i);
-        appendr(&b, 0);
-        usleep(MONITOR_MICROS);
-        pthread_spin_unlock(&shared->montermlock);
-      } else {
-        // running out of memory temporarily is a real possibility here
-        // the right thing to do, is stand aside and let lua try to fix
-        WARNF("(memv) we require more vespene gas");
-        usleep(MONITOR_MICROS);
-      }
-    }
-
-    if (!id) {
-      appendr(&b, 0);
-      appends(&b, "\e[H\e[J\e[?25h");
-      WRITE(tty, b, appendz(b).i);
-      tcsetattr(tty, TCSANOW, &oldterm);
-    }
-
-    DEBUGF("(memv) exiting...");
-    close(tty);
-    free(mi);
-    free(b);
-  }
-
-  DEBUGF("(memv) done");
-  return 0;
-}
-
-static void MonitorMemory(void) {
-  errno_t err;
-  if ((err = pthread_create(&monitorth, 0, MemoryMonitor, 0))) {
-    WARNF("(memv) failed to start memory monitor %s", strerror(err));
   }
 }
 
@@ -6921,7 +6563,9 @@ static int HandleConnection(size_t i) {
       DEBUGF("(token) can't acquire accept() token for client");
     }
     startconnection = timespec_real();
-    if (UNLIKELY(maxworkers) && shared->workers >= maxworkers) {
+    if (UNLIKELY(maxworkers) &&
+        atomic_load_explicit(&shared->workers, memory_order_relaxed) >=
+            maxworkers) {
       EnterMeltdownMode();
       SendServiceUnavailable();
       close(client);
@@ -6939,9 +6583,8 @@ static int HandleConnection(size_t i) {
     } else {
       switch ((pid = fork())) {
         case 0:
-          if (!IsTiny() && monitortty) {
-            MonitorMemory();
-          }
+          lua_repl_wock();
+          lua_repl_lock();
           meltdown = false;
           __isworker = true;
           connectionclose = false;
@@ -7174,8 +6817,10 @@ static void Listen(void) {
   size_t i, j, n;
   uint32_t ip, port, addrsize, *ifp;
   bool hasonserverlisten = IsHookDefined("OnServerListen");
+  bool is_default_port = false;
   if (!ports.n) {
     ProgramPort(8080);
+    is_default_port = true;
   }
   if (!ips.n) {
     if (interfaces && *interfaces) {
@@ -7205,11 +6850,33 @@ static void Listen(void) {
         n--;  // skip this server instance
         continue;
       }
-
-      if (bind(servers.p[n].fd, (struct sockaddr *)&servers.p[n].addr,
-               sizeof(servers.p[n].addr)) == -1) {
-        DIEF("(srvr) bind error: %m: %hhu.%hhu.%hhu.%hhu:%hu", ips.p[i] >> 24,
-             ips.p[i] >> 16, ips.p[i] >> 8, ips.p[i], ports.p[j]);
+      // Try binding with port auto-increment for default port
+      int max_attempts = (is_default_port && ports.p[j] < 8100) ? 20 : 1;
+      int attempt;
+      bool bind_success = false;
+      for (attempt = 0; attempt < max_attempts; attempt++) {
+        servers.p[n].addr.sin_port = htons(ports.p[j]);
+        if (bind(servers.p[n].fd, (struct sockaddr *)&servers.p[n].addr,
+                 sizeof(servers.p[n].addr)) == 0) {
+          bind_success = true;
+          break;
+        }
+        if (errno == EADDRINUSE && is_default_port && ports.p[j] < 8099) {
+          WARNF("(srvr) port %hu in use, trying %hu...", ports.p[j], ports.p[j] + 1);
+          ports.p[j]++;
+        } else {
+          break;  // Different error or explicit port - fail immediately
+        }
+      }
+      if (!bind_success) {
+        if (errno == EADDRINUSE) {
+          DIEF("(srvr) bind error: Port %hu is already in use on %hhu.%hhu.%hhu.%hhu\n"
+               "       Try a different port with: redbean -p <port>",
+               ports.p[j], ips.p[i] >> 24, ips.p[i] >> 16, ips.p[i] >> 8, ips.p[i]);
+        } else {
+          DIEF("(srvr) bind error: %m: %hhu.%hhu.%hhu.%hhu:%hu", ips.p[i] >> 24,
+               ips.p[i] >> 16, ips.p[i] >> 8, ips.p[i], ports.p[j]);
+        }
       }
       if (listen(servers.p[n].fd, 10) == -1) {
         DIEF("(srvr) listen error: %m");
@@ -7319,6 +6986,23 @@ static void SigInit(void) {
   InstallSignalHandler(SIGPIPE, SIG_IGN);
 }
 
+static int TlsRoutePsk(void *ctx, mbedtls_ssl_context *ssl,
+                       const unsigned char *identity, size_t identity_len) {
+  size_t i;
+  for (i = 0; i < psks.n; ++i) {
+    if (SlicesEqual((void *)identity, identity_len, psks.p[i].identity,
+                    psks.p[i].identity_len)) {
+      DEBUGF("(ssl) TlsRoutePsk(%`'.*s)", identity_len, identity);
+      mbedtls_ssl_set_hs_psk(ssl, psks.p[i].key, psks.p[i].key_len);
+      // keep track of selected psk to report its identity
+      sslpskindex = i + 1;  // use index+1 to check against 0 (when not set)
+      return 0;
+    }
+  }
+  WARNF("(ssl) TlsRoutePsk(%`'.*s) not found", identity_len, identity);
+  return -1;
+}
+
 static void TlsInit(void) {
 #ifndef UNSECURE
   int suite;
@@ -7397,7 +7081,7 @@ static void TlsDestroy(void) {
   mbedtls_ssl_config_free(&conf);
   mbedtls_ssl_config_free(&confcli);
   mbedtls_ssl_ticket_free(&ssltick);
-  CertsDestroy();
+  CertsDestroy(&certs);
   PsksDestroy();
   Free(&suites.p), suites.n = 0;
 #endif
@@ -7445,7 +7129,6 @@ static void GetOpts(int argc, char *argv[]) {
         CASE('h', PrintUsage(1, EXIT_SUCCESS));
         CASE('M', ProgramMaxPayloadSize(ParseInt(optarg)));
 #if !IsTiny()
-        CASE('W', monitortty = optarg);
       case 'f':
         funtrace = true;
         if (ftrace_install() == -1) {
@@ -7517,9 +7200,17 @@ void RedBean(int argc, char *argv[]) {
   heartbeatinterval.tv_sec = 5;
   CHECK_GT(CLK_TCK, 0);
   CHECK_NE(MAP_FAILED,
-           (shared = mmap(NULL, ROUNDUP(sizeof(struct Shared), FRAMESIZE),
+           (shared = mmap(NULL, ROUNDUP(sizeof(struct Shared), getgransize()),
                           PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
                           -1, 0)));
+  pthread_mutexattr_t attr;
+  unassert(!pthread_mutexattr_init(&attr));
+  unassert(!pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED));
+  unassert(!pthread_mutex_init(&shared->datetime_mu, &attr));
+  unassert(!pthread_mutex_init(&shared->server_mu, &attr));
+  unassert(!pthread_mutex_init(&shared->children_mu, &attr));
+  unassert(!pthread_mutex_init(&shared->lastmeltdown_mu, &attr));
+  unassert(!pthread_mutexattr_destroy(&attr));
   if (daemonize) {
     for (int i = 0; i < 256; ++i) {
       close(i);
@@ -7578,14 +7269,6 @@ void RedBean(int argc, char *argv[]) {
   inbuf = inbuf_actual;
   isinitialized = true;
   CallSimpleHookIfDefined("OnServerStart");
-  if (!IsTiny()) {
-    if (monitortty && (daemonize || uniprocess)) {
-      monitortty = 0;
-    }
-    if (monitortty) {
-      MonitorMemory();
-    }
-  }
 #ifdef STATIC
   EventLoop(timespec_tomillis(heartbeatinterval));
 #else
@@ -7596,13 +7279,6 @@ void RedBean(int argc, char *argv[]) {
   }
 #endif
   if (!isexitingworker) {
-    if (!IsTiny()) {
-      terminatemonitor = true;
-      if (monitorth) {
-        pthread_join(monitorth, 0);
-        monitorth = 0;
-      }
-    }
     HandleShutdown();
     CallSimpleHookIfDefined("OnServerStop");
   }
@@ -7619,6 +7295,9 @@ int main(int argc, char *argv[]) {
 #if !IsTiny()
   ShowCrashReports();
 #endif
+
+  // just in case
+  setlocale(LC_ALL, "C.UTF-8");
 
   LoadZipArgs(&argc, &argv);
   RedBean(argc, argv);

@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 enodev:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	ENODEV(%rip),%ecx
+	push	$ENODEV
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,ENODEV
-	ldrsw	x0,[x1,#:lo12:ENODEV]
+	mov	x0,#ENODEV
 	b	__errfun
 #else
 #error "unsupported architecture"

@@ -22,8 +22,8 @@
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
@@ -47,9 +47,9 @@
  * @return 0 on success, or -1 w/ errno
  * @raise EINVAL if `length` is negative
  * @raise EINTR if signal was delivered instead
- * @raise ECANCELED if thread was cancelled in masked mode
- * @raise EFBIG or EINVAL if `length` is too huge
  * @raise EFAULT if `path` points to invalid memory
+ * @raise ECANCELED if thread was cancelled in masked mode
+ * @raise EFBIG or EINVAL if `length` exceeds `RLIMIT_FSIZE`
  * @raise EACCES if we don't have permission to search a component of `path`
  * @raise ENOTDIR if a directory component in `path` exists as non-directory
  * @raise ENAMETOOLONG if symlink-resolved `path` length exceeds `PATH_MAX`
@@ -69,16 +69,15 @@ int truncate(const char *path, int64_t length) {
 
   if (IsMetal()) {
     rc = enosys();
-  } else if (!path || (IsAsan() && !__asan_is_valid_str(path))) {
+  } else if (kisdangerous(path)) {
     rc = efault();
   } else if (_weaken(__zipos_parseuri) &&
              _weaken(__zipos_parseuri)(path, &zipname) != -1) {
     rc = erofs();
   } else if (!IsWindows()) {
     rc = sys_truncate(path, length, length);
-    if (IsNetbsd() && rc == -1 && errno == ENOSPC) {
+    if (IsNetbsd() && rc == -1 && errno == ENOSPC)
       errno = EFBIG;  // POSIX doesn't specify ENOSPC for truncate()
-    }
   } else {
     rc = sys_truncate_nt(path, length);
   }

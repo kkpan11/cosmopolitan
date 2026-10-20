@@ -5,15 +5,16 @@
 o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/argon2		\
 	o/$(MODE)/third_party/awk		\
-	o/$(MODE)/third_party/bash		\
 	o/$(MODE)/third_party/bzip2		\
 	o/$(MODE)/third_party/chibicc		\
 	o/$(MODE)/third_party/compiler_rt	\
 	o/$(MODE)/third_party/ctags		\
+	o/$(MODE)/third_party/dash		\
 	o/$(MODE)/third_party/dlmalloc		\
 	o/$(MODE)/third_party/finger		\
 	o/$(MODE)/third_party/gdtoa		\
 	o/$(MODE)/third_party/getopt		\
+	o/$(MODE)/third_party/haclstar		\
 	o/$(MODE)/third_party/hiredis		\
 	o/$(MODE)/third_party/less		\
 	o/$(MODE)/third_party/libcxx		\
@@ -25,8 +26,10 @@ o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/make		\
 	o/$(MODE)/third_party/maxmind		\
 	o/$(MODE)/third_party/mbedtls		\
+	o/$(MODE)/third_party/miniaudio		\
 	o/$(MODE)/third_party/musl		\
 	o/$(MODE)/third_party/ncurses		\
+	o/$(MODE)/third_party/netcat		\
 	o/$(MODE)/third_party/nsync		\
 	o/$(MODE)/third_party/openmp		\
 	o/$(MODE)/third_party/pcre		\

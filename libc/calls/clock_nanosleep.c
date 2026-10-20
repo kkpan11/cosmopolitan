@@ -17,9 +17,15 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/timespec.h"
+#include "libc/calls/struct/timespec.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/timer.h"
+
+int sys_clock_nanosleep(int, int, const struct timespec *, struct timespec *);
 
 /**
  * Sleeps for particular amount of time.
@@ -56,7 +62,10 @@
  *
  * @param clock may be
  *     - `CLOCK_REALTIME`
+ *     - `CLOCK_BOOTTIME`
  *     - `CLOCK_MONOTONIC`
+ *     - `CLOCK_REALTIME_COARSE` but is likely to sleep negative time
+ *     - `CLOCK_MONTONIC_COARSE` but is likely to sleep negative time
  * @param flags can be 0 for relative and `TIMER_ABSTIME` for absolute
  * @param req can be a relative or absolute time, depending on `flags`
  * @param rem shall be updated with the remainder of unslept time when
@@ -79,18 +88,24 @@
 errno_t clock_nanosleep(int clock, int flags,        //
                         const struct timespec *req,  //
                         struct timespec *rem) {
-  if (IsMetal()) {
+  if (IsMetal())
     return ENOSYS;
-  }
+  if (IsLinux() && clock == CLOCK_REALTIME_COARSE)
+    clock = CLOCK_REALTIME;
+  if (IsLinux() && clock == CLOCK_MONOTONIC_COARSE)
+    clock = CLOCK_MONOTONIC;
   if (clock == 127 ||              //
       (flags & ~TIMER_ABSTIME) ||  //
       req->tv_sec < 0 ||           //
-      !(0 <= req->tv_nsec && req->tv_nsec <= 999999999)) {
+      !(0 <= req->tv_nsec && req->tv_nsec <= 999999999))
     return EINVAL;
-  }
-  errno_t old = errno;
-  int rc = sys_clock_nanosleep(clock, flags, req, rem);
-  errno_t err = !rc ? 0 : errno;
+  int rc;
+  errno_t err, old = errno;
+  rc = sys_clock_nanosleep(clock, flags, req, rem);
+  err = !rc ? 0 : errno;
   errno = old;
+  STRACE("clock_nanosleep(%s, %s, %s, [%s]) → %s", DescribeClockName(clock),
+         DescribeSleepFlags(flags), DescribeTimespec(0, req),
+         DescribeTimespec(rc, rem), DescribeErrno(err));
   return err;
 }

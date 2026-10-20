@@ -1,7 +1,10 @@
 /*-*- mode: ld-script; indent-tabs-mode: nil; tab-width: 2; coding: utf-8   -*-│
 │ vi: set et sts=2 sw=2 fenc=utf-8                                         :vi │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sysv/consts/prot.h"
 #include "libc/thread/tls.h"
+
+#define CACHELINE 64
 
 ENTRY(_start)
 OUTPUT_ARCH(aarch64)
@@ -11,7 +14,7 @@ OUTPUT_FORMAT("elf64-littleaarch64",
 
 SECTIONS {
 
-  . = SEGMENT_START("text-segment", 0x010000000000);
+  . = SEGMENT_START("text-segment", 0x000800000000);
   __executable_start = .;
   . += SIZEOF_HEADERS;
 
@@ -72,12 +75,15 @@ SECTIONS {
     KEEP(*(SORT_NONE(.fini)))
   } =0x1f2003d5
 
-  . += CONSTANT(MAXPAGESIZE);
+  . = ALIGN(CONSTANT(MAXPAGESIZE));
+  __privileged_start = .;
 
   .privileged : {
-    __privileged_start = ABSOLUTE(.) & -CONSTANT(MAXPAGESIZE);
     *(.privileged*)
   } =0x1f2003d6
+
+  . = ALIGN(CONSTANT(MAXPAGESIZE));
+  _rodata = .;
 
   .rodata : {
     KEEP(*(.rodata.pytab.0));
@@ -102,10 +108,8 @@ SECTIONS {
     *(.eh_frame_entry .eh_frame_entry.*)
   }
 
-  .eh_frame : ONLY_IF_RO {
-    KEEP(*(.eh_frame))
-    *(.eh_frame.*)
-  }
+  __eh_frame_hdr_start = SIZEOF(.eh_frame_hdr) > 0 ? ADDR(.eh_frame_hdr) : 0;
+  __eh_frame_hdr_end = SIZEOF(.eh_frame_hdr) > 0 ? . : 0;
 
   .gcc_except_table : ONLY_IF_RO {
     *(.gcc_except_table .gcc_except_table.*)
@@ -126,9 +130,11 @@ SECTIONS {
   . += CONSTANT(MAXPAGESIZE);
   . = DATA_SEGMENT_ALIGN(CONSTANT(MAXPAGESIZE), CONSTANT(COMMONPAGESIZE));
 
-  .eh_frame : ONLY_IF_RW {
+  .eh_frame : {
+    __eh_frame_start = .;
     KEEP(*(.eh_frame))
     *(.eh_frame.*)
+    __eh_frame_end = .;
   }
 
   .gnu_extab : ONLY_IF_RW {
@@ -199,6 +205,9 @@ SECTIONS {
   .data : {
     __data_start = .;
     KEEP(*(SORT_BY_NAME(.piro.data.sort.*)))
+    . = ALIGN(CACHELINE);
+    *(.data.rarechange)
+    . = ALIGN(CACHELINE);
     *(.data .data.* .gnu.linkonce.d.*)
     KEEP(*(SORT_BY_NAME(.sort.data.*)))
     SORT(CONSTRUCTORS)
@@ -213,6 +222,9 @@ SECTIONS {
 
   .bss : {
     *(.dynbss)
+    . = ALIGN(CACHELINE);
+    *(.bss.rarechange)
+    . = ALIGN(CACHELINE);
     *(.bss .bss.* .gnu.linkonce.b.*)
     KEEP(*(SORT_BY_NAME(.piro.bss.sort.*)))
     *(COMMON)
@@ -258,6 +270,9 @@ SECTIONS {
   .debug_ranges       0 : { *(.debug_ranges) }
   .debug_macro        0 : { *(.debug_macro) }
   .debug_addr         0 : { *(.debug_addr) }
+  .debug_names        0 : { *(.debug_names) }
+  .debug_loclists     0 : { *(.debug_loclists) }
+  .debug_str_offsets  0 : { *(.debug_str_offsets) }
   .ARM.attributes     0 : { KEEP(*(.ARM.attributes)) KEEP(*(.gnu.attributes)) }
   .note.gnu.arm.ident 0 : { KEEP(*(.note.gnu.arm.ident)) }
 
@@ -285,8 +300,7 @@ SECTIONS {
 
 ape_stack_vaddr = DEFINED(ape_stack_vaddr) ? ape_stack_vaddr : 0x700000000000;
 ape_stack_memsz = DEFINED(ape_stack_memsz) ? ape_stack_memsz : 8 * 1024 * 1024;
-ape_stack_align = DEFINED(ape_stack_align) ? ape_stack_align : 16;
-ape_stack_round = -ape_stack_align;
+ape_stack_prot = PROT_READ | PROT_WRITE;
 
 _tls_size = _tbss_end - _tdata_start;
 _tdata_size = _tdata_end - _tdata_start;

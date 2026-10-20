@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/calls/struct/timespec.h"
+#include "libc/cosmotime.h"
 #include "libc/sysv/consts/clock.h"
 
 /**
@@ -29,6 +29,6 @@
  */
 struct timespec timespec_mono(void) {
   struct timespec ts;
-  npassert(!clock_gettime(CLOCK_MONOTONIC, &ts));
+  unassert(!clock_gettime(CLOCK_MONOTONIC, &ts));
   return ts;
 }

@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/wctype.h"
+#include "libc/macros.h"
 #include "libc/serialize.h"
-#include "libc/str/str.h"
 
 static const char kWcTypeNames[][8] = {
     "alnum",   //
@@ -45,15 +45,11 @@ static const char kWcTypeNames[][8] = {
 wctype_t wctype(const char *s) {
   int i;
   char b[8];
-  for (i = 0; i < 8; ++i) {
+  for (i = 0; i < 8; ++i)
     b[i] = *s ? *s++ : 0;
-  }
-  if (!*s) {
-    for (i = 0; i < ARRAYLEN(kWcTypeNames); ++i) {
-      if (READ64LE(b) == READ64LE(kWcTypeNames[i])) {
+  if (!*s)
+    for (i = 0; i < ARRAYLEN(kWcTypeNames); ++i)
+      if (READ64LE(b) == READ64LE(kWcTypeNames[i]))
         return i + 1;
-      }
-    }
-  }
   return 0;
 }

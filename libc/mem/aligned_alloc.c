@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 
 /**
@@ -30,7 +30,11 @@
  */
 void *aligned_alloc(size_t a, size_t n) {
   if (IS2POW(a)) {
-    return memalign(a, n);
+    if (a <= sizeof(max_align_t)) {
+      return malloc(n);
+    } else {
+      return memalign(a, n);
+    }
   } else {
     errno = EINVAL;
     return 0;

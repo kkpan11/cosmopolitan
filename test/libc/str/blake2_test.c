@@ -18,21 +18,27 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/str/blake2.h"
 #include "libc/assert.h"
+#include "libc/bsdstdlib.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/mem/mem.h"
 #include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
-#include "libc/testlib/ezbench.h"
+#include "libc/str/tab.h"
+#include "libc/testlib/benchmark.h"
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
+#include "third_party/haclstar/haclstar.h"
+#include "third_party/mbedtls/sha256.h"
+
+#define BLAKE2B256_DIGEST_LENGTH 32
 
 __static_yoink("libc/testlib/blake2b256_tests.txt");
 __static_yoink("zipos");
 
 uint8_t *EZBLAKE2B256(const char *s, size_t n) {
   static uint8_t digest[BLAKE2B256_DIGEST_LENGTH];
-  BLAKE2B256(s, n, digest);
+  Hacl_Hash_Blake2b_hash_with_key(digest, BLAKE2B256_DIGEST_LENGTH, s, n, 0, 0);
   return digest;
 }
 
@@ -52,7 +58,7 @@ uint8_t *HEXBLAKE2B256(const char *s) {
     assert(b != -1);
     p[i] = a << 4 | b;
   }
-  BLAKE2B256(p, n, digest);
+  Hacl_Hash_Blake2b_hash_with_key(digest, BLAKE2B256_DIGEST_LENGTH, p, n, 0, 0);
   free(p);
   return digest;
 }
@@ -90,17 +96,40 @@ TEST(BLAKE2B256Test, vectors) {
   free(line);
 }
 
-BENCH(blake2, bench) {
+TEST(blake2b, test) {
+  uint8_t dig1[32], dig2[32];
+  Hacl_Hash_Blake2b_hash_with_key(dig1, 32, kHyperion, kHyperionSize, 0, 0);
+  Hacl_Hash_Blake2b_state_t *b2b256 = Hacl_Hash_Blake2b_malloc_256();
+  Hacl_Hash_Blake2b_update(b2b256, kHyperion, kHyperionSize);
+  ASSERT_EQ(32, Hacl_Hash_Blake2b_digest(b2b256, dig2));
+  ASSERT_EQ(0, memcmp(dig1, dig2, 32));
+  ASSERT_EQ(32, Hacl_Hash_Blake2b_digest(b2b256, dig2));
+  ASSERT_EQ(0, memcmp(dig1, dig2, 32));
+  Hacl_Hash_Blake2b_free(b2b256);
+}
+
+BENCH(blake2, benchmark) {
   char fun[256];
-  rngset(fun, 256, _rand64, -1);
-  EZBENCH_N("blake2b256", 0, EZBLAKE2B256(0, 0));
-  EZBENCH_N("blake2b256", 8, EZBLAKE2B256("helloooo", 8));
-  EZBENCH_N("blake2b256", 31, EZBLAKE2B256(fun, 31));
-  EZBENCH_N("blake2b256", 32, EZBLAKE2B256(fun, 32));
-  EZBENCH_N("blake2b256", 63, EZBLAKE2B256(fun, 63));
-  EZBENCH_N("blake2b256", 64, EZBLAKE2B256(fun, 64));
-  EZBENCH_N("blake2b256", 128, EZBLAKE2B256(fun, 128));
-  EZBENCH_N("blake2b256", 256, EZBLAKE2B256(fun, 256));
-  EZBENCH_N("blake2b256", kHyperionSize,
-            EZBLAKE2B256(kHyperion, kHyperionSize));
+  arc4random_buf(fun, 256);
+  BENCHMARK(100, 0, __expropriate(EZBLAKE2B256(0, 0)));
+  BENCHMARK(100, 1, __expropriate(EZBLAKE2B256("h", 1)));
+  BENCHMARK(100, 8, __expropriate(EZBLAKE2B256("helloooo", 8)));
+  BENCHMARK(100, 31, __expropriate(EZBLAKE2B256(fun, 31)));
+  BENCHMARK(100, 32, __expropriate(EZBLAKE2B256(fun, 32)));
+  BENCHMARK(100, 63, __expropriate(EZBLAKE2B256(fun, 63)));
+  BENCHMARK(100, 64, __expropriate(EZBLAKE2B256(fun, 64)));
+  BENCHMARK(100, 128, __expropriate(EZBLAKE2B256(fun, 128)));
+  BENCHMARK(100, 256, __expropriate(EZBLAKE2B256(fun, 256)));
+  BENCHMARK(100, kHyperionSize,
+            __expropriate(EZBLAKE2B256(kHyperion, kHyperionSize)));
+  uint8_t dig[32];
+  BENCHMARK(
+      1000, kHyperionSize,
+      Hacl_Hash_Blake2b_hash_with_key(dig, 32, kHyperion, kHyperionSize, 0, 0));
+  BENCHMARK(1000, kHyperionSize,
+            Hacl_Hash_SHA2_hash_256(dig, kHyperion, kHyperionSize));
+  BENCHMARK(1000, kHyperionSize,
+            mbedtls_sha256_ret(kHyperion, kHyperionSize, dig, 0));
+  BENCHMARK(1000, kHyperionSize,
+            Hacl_Hash_SHA1_hash(dig, kHyperion, kHyperionSize));
 }

@@ -11,7 +11,7 @@
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
@@ -451,6 +451,7 @@ typedef enum {
   TY_VLA,  // variable-length array
   TY_STRUCT,
   TY_UNION,
+  TY_NULLPTR_T,
 } TypeKind;
 
 struct Type {

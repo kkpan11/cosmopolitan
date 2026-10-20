@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 enotty:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	ENOTTY(%rip),%ecx
+	push	$ENOTTY
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,ENOTTY
-	ldrsw	x0,[x1,#:lo12:ENOTTY]
+	mov	x0,#ENOTTY
 	b	__errfun
 #else
 #error "unsupported architecture"

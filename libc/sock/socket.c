@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
 #include "libc/sysv/consts/af.h"
@@ -41,9 +41,8 @@
  */
 int socket(int family, int type, int protocol) {
   int rc;
-  if (family == AF_UNSPEC) {
+  if (family == AF_UNSPEC)
     family = AF_INET;
-  }
   if (family == -1) {
     rc = eafnosupport();
   } else if (!IsWindows()) {

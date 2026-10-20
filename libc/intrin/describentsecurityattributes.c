@@ -18,12 +18,13 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/state.internal.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/nt/struct/securityattributes.h"
 
-const char *(
-    DescribeNtSecurityAttributes)(char buf[32],
-                                  const struct NtSecurityAttributes *p) {
+const char *_DescribeNtSecurityAttributes(
+    char buf[32], const struct NtSecurityAttributes *p) {
+  if (p == &kNtIsInheritable)
+    return "&kNtIsInheritable";
   FormatInt64(buf, (uintptr_t)p);
   return buf;
 }

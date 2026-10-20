@@ -17,12 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/ctype.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/locale.h"
 #include "libc/str/str.h"
+#include "libc/wctype.h"
 #include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
@@ -69,7 +71,7 @@ static void LoadFlags(int argc, char *argv[]) {
   }
 }
 
-wontreturn static void Error(int rc, const char *s, ...) {
+[[noreturn]] static void Error(int rc, const char *s, ...) {
   va_list va;
   fflush(stdout);
   fputs("\33[1;31merror\33[37m: ", stderr);

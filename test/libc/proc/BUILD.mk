@@ -12,8 +12,8 @@ TEST_LIBC_PROC_OBJS =							\
 TEST_LIBC_PROC_COMS =							\
 	$(TEST_LIBC_PROC_SRCS:%.c=o/$(MODE)/%)
 
-TEST_LIBC_PROC_BINS =							\
-	$(TEST_LIBC_PROC_COMS)						\
+TEST_LIBC_PROC_BINS =						\
+	$(TEST_LIBC_PROC_COMS)					\
 	$(TEST_LIBC_PROC_COMS:%=%.dbg)
 
 TEST_LIBC_PROC_TESTS =							\
@@ -29,15 +29,17 @@ TEST_LIBC_PROC_DIRECTDEPS =						\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
 	LIBC_NT_KERNEL32						\
-	LIBC_RUNTIME							\
 	LIBC_PROC							\
+	LIBC_RUNTIME							\
+	LIBC_LOG							\
+	LIBC_STDIO							\
 	LIBC_STR							\
 	LIBC_SYSV							\
+	LIBC_SYSV_CALLS							\
 	LIBC_TESTLIB							\
 	LIBC_THREAD							\
 	LIBC_X								\
 	THIRD_PARTY_MUSL						\
-	THIRD_PARTY_TR
 
 TEST_LIBC_PROC_DEPS :=							\
 	$(call uniq,$(foreach x,$(TEST_LIBC_PROC_DIRECTDEPS),$($(x))))
@@ -59,6 +61,27 @@ o/$(MODE)/test/libc/proc/%.dbg:						\
 o/$(MODE)/test/libc/proc/posix_spawn_test.runs:				\
 		private QUOTA += -M8192m
 
+o/$(MODE)/test/libc/proc/fork_test.dbg:					\
+		$(TEST_LIBC_PROC_DEPS)					\
+		o/$(MODE)/test/libc/proc/fork_test.o			\
+		o/$(MODE)/test/libc/proc/proc.pkg			\
+		o/$(MODE)/tool/hello/life-pe.ape.zip.o			\
+		o/$(MODE)/test/libc/proc/life.zip.o			\
+		$(LIBC_TESTMAIN)					\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/proc/dope_test.dbg:					\
+		$(TEST_LIBC_PROC_DEPS)					\
+		o/$(MODE)/test/libc/proc/dope_test.o			\
+		o/$(MODE)/test/libc/proc/proc.pkg			\
+		o/$(MODE)/test/libc/proc/life.zip.o			\
+		$(LIBC_TESTMAIN)					\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
 o/$(MODE)/test/libc/proc/posix_spawn_test.dbg:				\
 		$(TEST_LIBC_PROC_DEPS)					\
 		o/$(MODE)/test/libc/proc/posix_spawn_test.o		\
@@ -73,24 +96,17 @@ o/$(MODE)/test/libc/proc/posix_spawn_test.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/test/libc/proc/system_test.dbg:				\
-		$(TEST_LIBC_PROC_DEPS)					\
-		o/$(MODE)/test/libc/proc/system_test.o			\
-		o/$(MODE)/test/libc/proc/proc.pkg			\
-		o/$(MODE)/tool/build/echo.zip.o				\
-		o/$(MODE)/tool/build/cocmd.zip.o			\
-		o/$(MODE)/tool/build/false.zip.o			\
-		$(LIBC_TESTMAIN)					\
-		$(CRT)							\
-		$(APE_NO_MODIFY_SELF)
-	@$(APELINK)
-
 o/$(MODE)/test/libc/proc/execve_test.dbg:				\
 		$(TEST_LIBC_PROC_DEPS)					\
 		o/$(MODE)/test/libc/proc/execve_test.o			\
-		o/$(MODE)/test/libc/calls/life-nomod.zip.o		\
 		o/$(MODE)/test/libc/proc/execve_test_prog1.zip.o	\
-		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o		\
+		o/$(MODE)/test/libc/proc/execve_test_prog2.zip.o	\
+		o/$(MODE)/test/libc/proc/echo.elf.zip.o			\
+		o/$(MODE)/test/libc/proc/life-nozip.elf.zip.o		\
+		o/$(MODE)/test/libc/proc/life-nozip.zip.o		\
+		o/$(MODE)/test/libc/proc/noleaks.elf.zip.o		\
+		o/$(MODE)/test/libc/proc/zipread.zip.o			\
+		o/$(MODE)/test/libc/proc/zipread.elf.zip.o		\
 		o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o		\
 		o/$(MODE)/test/libc/proc/proc.pkg			\
 		$(LIBC_TESTMAIN)					\
@@ -102,18 +118,117 @@ o/$(MODE)/test/libc/proc/fexecve_test.dbg:				\
 		$(TEST_LIBC_PROC_DEPS)					\
 		o/$(MODE)/test/libc/proc/fexecve_test.o			\
 		o/$(MODE)/test/libc/proc/proc.pkg			\
-		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o		\
-		o/$(MODE)/test/libc/calls/life-nomod.zip.o		\
-		o/$(MODE)/test/libc/calls/zipread.zip.o			\
+		o/$(MODE)/test/libc/proc/echo.elf.zip.o			\
+		o/$(MODE)/test/libc/proc/life-nozip.elf.zip.o		\
+		o/$(MODE)/test/libc/proc/life-nozip.zip.o		\
+		o/$(MODE)/test/libc/proc/noleaks.elf.zip.o		\
+		o/$(MODE)/test/libc/proc/zipread.zip.o			\
+		o/$(MODE)/test/libc/proc/zipread.elf.zip.o		\
 		$(LIBC_TESTMAIN)					\
 		$(CRT)							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/test/libc/proc/life.dbg:					\
+		$(TEST_LIBC_PROC_DEPS)					\
+		o/$(MODE)/test/libc/proc/life.o				\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/proc/zipread.dbg:			\
+		$(LIBC_RUNTIME)					\
+		o/$(MODE)/test/libc/proc/zipread.o			\
+		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o	\
+		$(CRT)						\
+		$(APE)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/proc/zipread.elf:				\
+		o/$(MODE)/tool/build/assimilate		\
+		o/$(MODE)/test/libc/proc/zipread		\
+		o/$(MODE)/tool/build/cp
+	@$(COMPILE) -wACP -T$@					\
+		o/$(MODE)/tool/build/cp				\
+		o/$(MODE)/test/libc/proc/zipread		\
+		o/$(MODE)/test/libc/proc/zipread.elf
+	@$(COMPILE) -wAASSIMILATE -T$@				\
+		o/$(MODE)/tool/build/assimilate -bcef	\
+		o/$(MODE)/test/libc/proc/zipread.elf
+
+o/$(MODE)/test/libc/proc/echo.elf:				\
+		o/$(MODE)/tool/build/assimilate		\
+		o/$(MODE)/tool/build/echo		\
+		o/$(MODE)/tool/build/cp
+	@$(COMPILE) -wACP -T$@					\
+		o/$(MODE)/tool/build/cp				\
+		o/$(MODE)/tool/build/echo		\
+		o/$(MODE)/test/libc/proc/echo.elf
+	@$(COMPILE) -wAASSIMILATE -T$@				\
+		o/$(MODE)/tool/build/assimilate -bcef	\
+		o/$(MODE)/test/libc/proc/echo.elf
+
+o/$(MODE)/test/libc/proc/life-nozip:					\
+		o/$(MODE)/tool/build/cp			\
+		o/$(MODE)/tool/build/zipremove		\
+		o/$(MODE)/test/libc/calls/life-nomod
+	@$(COMPILE) -wACP -T$@					\
+		o/$(MODE)/tool/build/cp				\
+		o/$(MODE)/test/libc/calls/life-nomod		\
+		o/$(MODE)/test/libc/proc/life-nozip
+	@$(COMPILE) -wAZIPREMOVE -T$@				\
+		o/$(MODE)/tool/build/zipremove			\
+		o/$(MODE)/test/libc/proc/life-nozip
+
+o/$(MODE)/test/libc/proc/life-nozip.elf:				\
+		o/$(MODE)/tool/build/cp			\
+		o/$(MODE)/tool/build/zipremove		\
+		o/$(MODE)/test/libc/mem/prog/life.elf
+	@$(COMPILE) -wACP -T$@					\
+		o/$(MODE)/tool/build/cp				\
+		o/$(MODE)/test/libc/mem/prog/life.elf		\
+		o/$(MODE)/test/libc/proc/life-nozip.elf
+	@$(COMPILE) -wAZIPREMOVE -T$@				\
+		o/$(MODE)/tool/build/zipremove			\
+		o/$(MODE)/test/libc/proc/life-nozip.elf
+
+o/$(MODE)/test/libc/proc/noleaks.elf:				\
+		o/$(MODE)/tool/build/assimilate		\
+		o/$(MODE)/tool/build/cp			\
+		o/$(MODE)/tool/build/zipremove		\
+		o/$(MODE)/test/libc/proc/noleaks
+	@$(COMPILE) -wACP -T$@					\
+		o/$(MODE)/tool/build/cp				\
+		o/$(MODE)/test/libc/proc/noleaks		\
+		o/$(MODE)/test/libc/proc/noleaks.elf
+	@$(COMPILE) -wAASSIMILATE -T$@				\
+		o/$(MODE)/tool/build/assimilate -bcef	\
+		o/$(MODE)/test/libc/proc/noleaks.elf
+	@$(COMPILE) -wAZIPREMOVE -T$@				\
+		o/$(MODE)/tool/build/zipremove			\
+		o/$(MODE)/test/libc/proc/noleaks.elf
+
+o/$(MODE)/test/libc/proc/life.zip.o					\
 o/$(MODE)/test/libc/proc/execve_test_prog1.zip.o			\
-o/$(MODE)/test/libc/proc/life-pe.zip.o: private				\
-		ZIPOBJ_FLAGS +=						\
+o/$(MODE)/test/libc/proc/execve_test_prog2.zip.o			\
+o/$(MODE)/test/libc/proc/life-nozip.zip.o				\
+o/$(MODE)/test/libc/proc/life-nozip.elf.zip.o				\
+o/$(MODE)/test/libc/proc/life-pe.zip.o			\
+o/$(MODE)/test/libc/proc/echo.elf.zip.o					\
+o/$(MODE)/test/libc/proc/noleaks.elf.zip.o				\
+o/$(MODE)/test/libc/proc/zipread.elf.zip.o				\
+o/$(MODE)/test/libc/proc/zipread.zip.o: private		\
+		ZIPOBJ_FLAGS +=					\
 			-B
+
+o/$(MODE)/test/libc/proc/execve_test.runs:				\
+		private .SANDBOXED = 0  # for memfd_create()
+
+o/$(MODE)/test/libc/proc/fexecve_test.runs:				\
+		private .SANDBOXED = 0  # for memfd_create()
+
+o/$(MODE)/test/libc/proc/vfork_test.runs:				\
+		private .UNVEIL = r:/dev/random r:/dev/urandom
 
 $(TEST_LIBC_PROC_OBJS): test/libc/proc/BUILD.mk
 

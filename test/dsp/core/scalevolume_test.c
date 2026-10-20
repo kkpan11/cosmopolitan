@@ -17,10 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/core/core.h"
-#include "dsp/mpeg/mpeg.h"
+#include "libc/bsdstdlib.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/stdio/rand.h"
 #include "libc/testlib/ezbench.h"
@@ -145,7 +145,7 @@ TEST(scalevolume, testSmallestScale_justSaturates) {
 //   - ~200ns w/ -O3 -march=skylake MODE=rel
 
 void randomizeaudio(void) {
-  rngset(pcm, sizeof(pcm), _rand64, -1);
+  arc4random_buf(pcm, sizeof(pcm));
 }
 
 void scalevolume_pure(int amt) {

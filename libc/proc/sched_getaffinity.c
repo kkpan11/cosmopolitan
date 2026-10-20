@@ -20,11 +20,11 @@
 #include "libc/calls/struct/cpuset.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
-#include "libc/proc/proc.internal.h"
+#include "libc/proc/proc.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
 

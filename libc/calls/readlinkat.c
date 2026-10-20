@@ -19,12 +19,13 @@
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/zipos.internal.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -35,34 +36,47 @@
  * @param dirfd is normally AT_FDCWD but if it's an open directory and
  *     file is a relative path, then file is opened relative to dirfd
  * @param path must be a symbolic link pathname
- * @param buf will receive symbolic link contents, and won't be modified
- *     unless the function succeeds (with the exception of no-malloc nt)
- *     and this buffer will *not* be nul-terminated
+ * @param buf will receive symbolic link contents; it won't be modified
+ *     unless the function succeeds; this buffer is never nul-terminated
+ * @param bufsiz specifies how many bytes are available at `buf`
  * @return number of bytes written to buf, or -1 w/ errno; if the
  *     return is equal to bufsiz then truncation may have occurred
  * @raise EINVAL if path isn't a symbolic link
  * @raise ENOENT if `path` didn't exist
+ * @raise ENOENT if `path` was an empty string
+ * @raise EFAULT if `path` or `buf` pointed to bad memory
  * @raise ENOTDIR if parent component existed that's not a directory
  * @raise ENOTDIR if base component ends with slash and is not a dir
  * @raise ENAMETOOLONG if symlink-resolved `path` length exceeds `PATH_MAX`
  * @raise ENAMETOOLONG if component in `path` exists longer than `NAME_MAX`
  * @raise EBADF on relative `path` when `dirfd` isn't open or `AT_FDCWD`
  * @raise ELOOP if a loop was detected resolving parent components
+ * @raise ENOMEM if insufficient memory was available to the impl
  * @asyncsignalsafe
  */
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t bufsiz) {
+  char mybuf[1];
   ssize_t bytes;
-  if ((bufsiz && !buf) || (IsAsan() && (!__asan_is_valid_str(path) ||
-                                        !__asan_is_valid(buf, bufsiz)))) {
+  if (IsLinux() && !bufsiz) {
+    // the linux kernel will einval if bufsiz is zero. linux is the only
+    // os that does this. it's much simpler if we reserve einval for the
+    // important thing posix specifies, which is path not being symlink.
+    buf = mybuf;
+    bufsiz = 1;
+  }
+  if (kisdangerous(path)) {
     bytes = efault();
   } else if (_weaken(__zipos_notat) &&
              (bytes = __zipos_notat(dirfd, path)) == -1) {
     STRACE("TODO: zipos support for readlinkat");
+    bytes = einval();
   } else if (!IsWindows()) {
     bytes = sys_readlinkat(dirfd, path, buf, bufsiz);
   } else {
     bytes = sys_readlinkat_nt(dirfd, path, buf, bufsiz);
   }
+  if (IsLinux() && buf == mybuf && bytes == 1)
+    bytes = 0;
   STRACE("readlinkat(%s, %#s, [%#.*s]) → %d% m", DescribeDirfd(dirfd), path,
          (int)MAX(0, bytes), buf, bytes);
   return bytes;

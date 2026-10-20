@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -28,7 +28,7 @@
 
 int column_;
 
-wontreturn void usage(int rc, FILE *f) {
+[[noreturn]] void usage(int rc, FILE *f) {
   fputs("Usage: ", f);
   fputs(program_invocation_name, f);
   fputs(" [-w COLS] [FILE...]\n", f);

@@ -20,31 +20,52 @@
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/errno.h"
+#include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/madv.h"
 #include "libc/sysv/errfuns.h"
 
 /**
- * Drops hints to O/S about intended access patterns of mmap()'d memory.
+ * Advises kernel about memory intentions.
  *
- * @param advice can be MADV_WILLNEED, MADV_SEQUENTIAL, MADV_FREE, etc.
  * @return 0 on success, or -1 w/ errno
- * @raise EINVAL if `advice` isn't valid or supported by system
- * @raise EINVAL on Linux if addr/length isn't page size aligned with
- *     respect to `getauxval(AT_PAGESZ)`
- * @raise ENOMEM on Linux if addr/length overlaps unmapped regions
- * @see libc/sysv/consts.sh
- * @see fadvise()
+ * @raise EINVAL if `advice` isn't valid
+ * @raise EINVAL if `len` is negative
+ * @raise EINVAL if `addr` isn't multiple of `sysconf(_SC_PAGESIZE)`
+ * @raise ENOMEM if interval overlaps unmapped pages (on some OSes)
  */
-int madvise(void *addr, size_t length, int advice) {
-  int rc;
-  if (IsAsan() && !__asan_is_valid(addr, length)) {
-    rc = enomem();
-  } else if (!IsWindows()) {
-    rc = sys_madvise(addr, length, advice);
-  } else {
-    rc = sys_madvise_nt(addr, length, advice);
+int madvise(void *addr, size_t len, int advice) {
+
+  switch (advice) {
+    case MADV_NORMAL:
+    case MADV_RANDOM:
+    case MADV_WILLNEED:
+    case MADV_SEQUENTIAL:
+    case MADV_DONTNEED:
+      break;
+    default:
+      return einval();
   }
-  STRACE("madvise(%p, %'zu, %d) → %d% m", addr, length, advice, rc);
+
+  if (!len)
+    return 0;
+
+  if ((int64_t)len < 0)
+    return einval();
+
+  if ((uintptr_t)addr & (__pagesize - 1))
+    return einval();
+
+  int rc = 0;
+  if (!IsWindows()) {
+    rc = sys_madvise(addr, len, advice);
+  } else {
+    errno_t err = sys_posix_madvise_nt(addr, len, advice);
+    if (err) {
+      errno = err;
+      rc = -1;
+    }
+  }
+
   return rc;
 }

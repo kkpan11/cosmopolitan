@@ -25,6 +25,8 @@
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/ucontext.h"
+#include "libc/cosmotime.h"
+#include "libc/ctype.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
@@ -32,17 +34,18 @@
 #include "libc/intrin/bsf.h"
 #include "libc/intrin/bsr.h"
 #include "libc/intrin/hilbert.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/str/unicode.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/fileno.h"
@@ -246,7 +249,7 @@ static void Setup(void) {
   sigaction(SIGWINCH, &(struct sigaction){.sa_sigaction = OnSigWinch}, NULL);
 }
 
-static wontreturn void FailPath(const char *s, int rc) {
+[[noreturn]] static void FailPath(const char *s, int rc) {
   Write("error: ");
   Write(s);
   Write(": ");
@@ -281,8 +284,8 @@ static void SetupCanvas(void) {
     munmap(buffer, buffersize);
   }
   displaysize = ROUNDUP(ROUNDUP((tyn * txn) << zoom, 16), 1ul << zoom);
-  canvassize = ROUNDUP(displaysize, FRAMESIZE);
-  buffersize = ROUNDUP(tyn * txn * 16 + 4096, FRAMESIZE);
+  canvassize = ROUNDUP(displaysize, getgransize());
+  buffersize = ROUNDUP(tyn * txn * 16 + 4096, getgransize());
   canvas = Allocate(canvassize);
   buffer = Allocate(buffersize);
 }
@@ -333,10 +336,11 @@ static long Index(long y, long x) {
 static void PreventBufferbloat(void) {
   struct timespec now, rate;
   static struct timespec last;
-  now = timespec_real();
+  now = timespec_mono();
   rate = timespec_frommicros(1. / fps * 1e6);
   if (timespec_cmp(timespec_sub(now, last), rate) < 0) {
-    timespec_sleep(timespec_sub(rate, timespec_sub(now, last)));
+    timespec_sleep(CLOCK_MONOTONIC,
+                   timespec_sub(rate, timespec_sub(now, last)));
   }
   last = now;
 }
@@ -899,7 +903,7 @@ static void MemZoom(void) {
   } while (!(action & INTERRUPTED));
 }
 
-static wontreturn void PrintUsage(int rc, int fd) {
+[[noreturn]] static void PrintUsage(int rc, int fd) {
   tinyprint(fd, "SYNOPSIS\n\n ", program_invocation_name, USAGE, NULL);
   exit(rc);
 }

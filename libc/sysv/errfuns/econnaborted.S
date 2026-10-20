@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 econnaborted:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	ECONNABORTED(%rip),%ecx
+	push	$ECONNABORTED
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,ECONNABORTED
-	ldrsw	x0,[x1,#:lo12:ECONNABORTED]
+	mov	x0,#ECONNABORTED
 	b	__errfun
 #else
 #error "unsupported architecture"

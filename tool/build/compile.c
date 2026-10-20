@@ -26,19 +26,20 @@
 #include "libc/calls/struct/timeval.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/libgen.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/intrin/x86.h"
 #include "libc/limits.h"
 #include "libc/log/appendresourcereport.internal.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/alg.h"
 #include "libc/mem/gc.h"
@@ -51,12 +52,12 @@
 #include "libc/serialize.h"
 #include "libc/stdio/append.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/itimer.h"
-#include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/o.h"
-#include "libc/sysv/consts/rlimit.h"
+#include "libc/sysv/consts/posix.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sig.h"
@@ -111,9 +112,9 @@ FLAGS\n\
   -T TARGET    specifies target name for V=0 logging\n\
   -A ACTION    specifies short command name for V=0 logging\n\
   -V NUMBER    specifies compiler version\n\
-  -C SECS      set cpu limit [default 16]\n\
+  -C SECS      set cpu limit [default 32]\n\
   -L SECS      set lat limit [default 90]\n\
-  -P PROCS     set pro limit [default 4096]\n\
+  -P PROCS     set pro limit [default 8192]\n\
   -S BYTES     set stk limit [default 8m]\n\
   -M BYTES     set mem limit [default 2048m]\n\
   -F BYTES     set fsz limit [default 256m]\n\
@@ -213,23 +214,23 @@ char *g_tmpout;
 const char *g_tmpout_original;
 
 const char *const kSafeEnv[] = {
-    "ADDR2LINE",    // needed by GetAddr2linePath
-    "BUILDLOG",     // used by cosmocc
-    "HOME",         // needed by ~/.runit.psk
-    "HOMEDRIVE",    // needed by ~/.runit.psk
-    "HOMEPATH",     // needed by ~/.runit.psk
-    "KPRINTF_LOG",  // used by internals
-    "MAKEFLAGS",    // needed by IsRunningUnderMake
-    "MODE",         // needed by test scripts
-    "PATH",         // needed by clang
-    "PWD",          // just seems plain needed
-    "STRACE",       // useful for troubleshooting
-    "SYSTEMROOT",   // needed by socket()
-    "TERM",         // needed to detect colors
-    "TMPDIR",       // needed by compiler
+    "ADDR2LINE",      // needed by GetAddr2linePath
+    "BUILDLOG",       // used by cosmocc
+    "COSMO_COMPILE",  // needed by IsRunningUnderMake
+    "HOME",           // needed by ~/.runit.psk
+    "HOMEDRIVE",      // needed by ~/.runit.psk
+    "HOMEPATH",       // needed by ~/.runit.psk
+    "KPRINTF_CRASH",  // used by internals
+    "KPRINTF_LOG",    // used by internals
+    "MAKEFLAGS",      // needed by IsRunningUnderMake
+    "MODE",           // needed by test scripts
+    "PATH",           // needed by clang
+    "PWD",            // just seems plain needed
+    "STRACE",         // useful for troubleshooting
+    "SYSTEMROOT",     // needed by socket()
+    "TERM",           // needed to detect colors
+    "TMPDIR",         // needed by compiler
 };
-
-#include "libc/mem/tinymalloc.inc"
 
 void OnAlrm(int sig) {
   ++gotalrm;
@@ -263,7 +264,7 @@ void PrintMakeCommand(void) {
   appends(&output, "make MODE=");
   appends(&output, mode);
   appends(&output, " -j");
-  appendd(&output, buf, FormatUint64(buf, __get_cpu_count()) - buf);
+  appendd(&output, buf, FormatUint64(buf, cosmo_cpu_count()) - buf);
   appendw(&output, ' ');
   appends(&output, target);
 }
@@ -274,6 +275,37 @@ uint64_t GetTimevalMicros(struct timeval tv) {
 
 uint64_t GetTimespecMicros(struct timespec ts) {
   return ts.tv_sec * 1000000ull + ts.tv_nsec / 1000;
+}
+
+bool IsDirectory(const char *path) {
+  int e = errno;
+  struct stat st;
+  if (!stat(path, &st))
+    return S_ISDIR(st.st_mode);
+  errno = e;
+  return false;
+}
+
+bool IsCharDev(int fd) {
+  int e = errno;
+  struct stat st;
+  if (!fstat(fd, &st))
+    return S_ISCHR(st.st_mode);
+  errno = e;
+  return false;
+}
+
+int Touch(const char *file, uint32_t mode) {
+  int rc, fd, olderr;
+  olderr = errno;
+  if ((rc = utimes(file, 0)) == -1 && errno == ENOENT) {
+    errno = olderr;
+    fd = open(file, O_CREAT | O_WRONLY, mode);
+    if (fd == -1)
+      return -1;
+    return close(fd);
+  }
+  return rc;
 }
 
 ssize_t WriteAllUntilSignalledOrError(int fd, const char *p, size_t n) {
@@ -516,7 +548,11 @@ void AddArg(char *actual) {
 }
 
 static int GetBaseCpuFreqMhz(void) {
+#ifdef __x86_64__
   return KCPUIDS(16H, EAX) & 0x7fff;
+#else
+  return 0;
+#endif
 }
 
 void PlanResource(int resource, struct rlimit rlim) {
@@ -525,7 +561,7 @@ void PlanResource(int resource, struct rlimit rlim) {
     return;
   rlim.rlim_cur = MIN(rlim.rlim_cur, prior.rlim_max);
   rlim.rlim_max = MIN(rlim.rlim_max, prior.rlim_max);
-  posix_spawnattr_setrlimit(&spawnattr, resource, &rlim);
+  posix_spawnattr_setrlimit_np(&spawnattr, resource, &rlim);
 }
 
 void SetCpuLimit(int secs) {
@@ -646,8 +682,9 @@ int Launch(void) {
 
   posix_spawnattr_init(&spawnattr);
   posix_spawnattr_setsigmask(&spawnattr, &savemask);
-  posix_spawnattr_setflags(&spawnattr,
-                           POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETRLIMIT);
+  posix_spawnattr_setflags(&spawnattr, POSIX_SPAWN_USEVFORK |
+                                           POSIX_SPAWN_SETSIGMASK |
+                                           POSIX_SPAWN_SETRLIMIT_NP);
   SetCpuLimit(cpuquota);
   SetFszLimit(fszquota);
   SetMemLimit(memquota);
@@ -790,13 +827,17 @@ bool MovePreservingDestinationInode(const char *from, const char *to) {
     close(fdin);
     return false;
   }
-  fadvise(fdin, 0, st.st_size, MADV_SEQUENTIAL);
+  posix_fadvise(fdin, 0, st.st_size, POSIX_FADV_SEQUENTIAL);
   ftruncate(fdout, st.st_size);
   for (res = true, remain = st.st_size; remain;) {
     rc = copy_file_range(fdin, 0, fdout, 0, remain, 0);
     if (rc != -1) {
       remain -= rc;
-    } else if (errno == EXDEV || errno == ENOSYS) {
+    } else if (errno == EXDEV ||    // different partitions
+               errno == EINVAL ||   // possible w/ ecryptfs
+               errno == ENOSYS ||   // not linux or freebsd
+               errno == ENOTSUP ||  // no fs support for it
+               errno == EOPNOTSUPP) {
       if (lseek(fdin, 0, SEEK_SET) == -1) {
         res = false;
         break;
@@ -852,13 +893,14 @@ int main(int argc, char *argv[]) {
   ShowCrashReports();
 #endif
 
+  putenv("COSMO_COMPILE=1");
   mode = firstnonnull(getenv("MODE"), MODE);
 
   // parse prefix arguments
   verbose = 4;
   timeout = 90;                    // secs
   cpuquota = 32;                   // secs
-  proquota = 4096;                 // procs
+  proquota = 8192;                 // procs
   stkquota = 8 * 1024 * 1024;      // bytes
   fszquota = 256 * 1000 * 1000;    // bytes
   memquota = 2048L * 1024 * 1024;  // bytes
@@ -1180,11 +1222,9 @@ int main(int argc, char *argv[]) {
     }
     if (wantnoredzone) {
       AddArg("-mno-red-zone");
-      AddArg("-D__MNO_RED_ZONE__");
     }
     if (wantframe) {
       AddArg("-fno-omit-frame-pointer");
-      AddArg("-D__FNO_OMIT_FRAME_POINTER__");
     } else {
       AddArg("-fomit-frame-pointer");
     }
@@ -1205,7 +1245,7 @@ int main(int argc, char *argv[]) {
   // ensure output directory exists
   if (outpath) {
     outdir = xdirname(outpath);
-    if (!isdirectory(outdir)) {
+    if (!IsDirectory(outdir)) {
       MakeDirs(outdir, 0755);
     }
   }
@@ -1249,7 +1289,7 @@ int main(int argc, char *argv[]) {
       if (!(exitcode = WEXITSTATUS(ws)) || exitcode == 254) {
         if (touchtarget && target) {
           MakeDirs(xdirname(target), 0755);
-          if (touch(target, 0644)) {
+          if (Touch(target, 0644)) {
             exitcode = 90;
             appends(&output, "\nfailed to touch output file\n");
           }
@@ -1324,7 +1364,7 @@ int main(int argc, char *argv[]) {
     if (fulloutput) {
       ReportResources();
     }
-    if (!__nocolor && ischardev(2)) {
+    if (!__nocolor && IsCharDev(2)) {
       /* clear line forward */
       appendw(&output, READ32LE("\e[K"));
     }
@@ -1347,7 +1387,7 @@ int main(int argc, char *argv[]) {
         appendd(&output, command, m - 3);
         appendw(&output, READ32LE("..."));
       } else {
-        if (n < m && (__nocolor || !ischardev(2))) {
+        if (n < m && (__nocolor || !IsCharDev(2))) {
           while (n < m)
             appendw(&command, ' '), ++n;
         }

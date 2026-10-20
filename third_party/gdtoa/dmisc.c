@@ -34,30 +34,34 @@
 void
 freedtoa(char *s)
 {
-	ThInfo *TI = 0;
+	// warning: stone cold pointer abuse
 	Bigint *b = (Bigint *)((int *)s - 1);
 	b->maxwds = 1 << (b->k = *(int *)b);
-	__gdtoa_Bfree(b, &TI);
+	__gdtoa_Bfree(b);
 }
 
 char *
-__gdtoa_rv_alloc(int i, ThInfo **PTI)
+__gdtoa_rv_alloc(int i)
 {
 	int j, k, *r;
 	j = sizeof(ULong);
+	// warning: stone cold pointer abuse
 	for (k = 0; (int)(sizeof(Bigint) - sizeof(ULong) - sizeof(int)) + j <= i;
 	     j <<= 1)
 		k++;
-	r = (int *)__gdtoa_Balloc(k, PTI);
+	r = (int *)__gdtoa_Balloc(k);
+	if (r == NULL)
+		return NULL;
 	*r = k;
 	return (char *)(r + 1);
 }
 
 char *
-__gdtoa_nrv_alloc(char *s, char **rve, int n, ThInfo **PTI)
+__gdtoa_nrv_alloc(char *s, char **rve, int n)
 {
 	char *rv, *t;
-	t = rv = __gdtoa_rv_alloc(n, PTI);
+	if (!(t = rv = __gdtoa_rv_alloc(n)))
+		return 0;
 	while ((*t = *s++) != 0)
 		t++;
 	if (rve)

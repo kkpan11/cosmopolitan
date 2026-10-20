@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 eownerdead:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	EOWNERDEAD(%rip),%ecx
+	push	$EOWNERDEAD
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,EOWNERDEAD
-	ldrsw	x0,[x1,#:lo12:EOWNERDEAD]
+	mov	x0,#EOWNERDEAD
 	b	__errfun
 #else
 #error "unsupported architecture"

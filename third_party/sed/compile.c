@@ -47,6 +47,7 @@
 #include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/utime.h"
 #include "libc/mem/gc.h"
+#include "libc/ctype.h"
 #include "libc/time.h"
 
 #include "libc/str/str.h"
@@ -55,7 +56,6 @@
 #include "libc/calls/calls.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/f.h"
-#include "libc/sysv/consts/fd.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/limits.h"
 #include "libc/sysv/consts/_posix.h"

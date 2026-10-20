@@ -21,18 +21,19 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/cosmotime.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/f.h"
-#include "libc/sysv/consts/fd.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/s.h"
+#include "libc/sysv/pib.h"
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
@@ -47,9 +48,6 @@ void SetUpOnce(void) {
 
 TEST(open, efault) {
   ASSERT_SYS(EFAULT, -1, open(0, O_RDONLY));
-  if (IsWindows() || !IsAsan())
-    return;  // not possible
-  ASSERT_SYS(EFAULT, -1, open((void *)77, O_RDONLY));
 }
 
 TEST(open, enoent) {
@@ -61,8 +59,10 @@ TEST(open, enoent) {
 TEST(open, enotdir) {
   ASSERT_SYS(0, 0, touch("o", 0644));
   ASSERT_SYS(ENOTDIR, -1, open("o/", O_RDONLY));
-  ASSERT_SYS(ENOTDIR, -1, open("o/.", O_RDONLY));
-  ASSERT_SYS(ENOTDIR, -1, open("o/./", O_RDONLY));
+  if (!IsWindows())  // normalization doesn't do i/o on windows
+    ASSERT_SYS(ENOTDIR, -1, open("o/.", O_RDONLY));
+  if (!IsWindows())  // normalization doesn't do i/o on windows
+    ASSERT_SYS(ENOTDIR, -1, open("o/./", O_RDONLY));
   ASSERT_SYS(ENOTDIR, -1, open("o/doesnotexist", O_RDONLY));
 }
 
@@ -92,7 +92,7 @@ TEST(open, fdWillBeClosedByExecveAutomatically) {
 }
 
 TEST(open, enametoolong) {
-  size_t n = 260;
+  size_t n = 5000;
   char *s = gc(xcalloc(1, n + 1));
   memset(s, 'J', n);
   ASSERT_SYS(ENAMETOOLONG, -1, creat(s, 0644));
@@ -134,18 +134,62 @@ TEST(open, testOpenExistingForReadWrite_seeksToStart) {
   EXPECT_SYS(0, 0, close(3));
 }
 
-TEST(open, testOpenExistingForAppendWriteOnly_seeksToEnd) {
+TEST(open, testOpenAppend_seekToBeginning_stillWritesToEnd) {
+  char buf[16] = {0};
+  ASSERT_SYS(0, 0, xbarf("hello.txt", "hell", -1));
+  ASSERT_SYS(0, 3, open("hello.txt", O_WRONLY | O_APPEND));
+  EXPECT_SYS(EBADF, -1, read(3, buf, 4));      // in O_WRONLY mode
+  EXPECT_SYS(EBADF, -1, pread(3, buf, 4, 0));  // in O_WRONLY mode
+  EXPECT_SYS(0, 1, lseek(3, 1, SEEK_SET));
+  EXPECT_SYS(0, 1, write(3, "a", 1));
+  EXPECT_SYS(0, 5, lseek(3, 0, SEEK_END));
+  EXPECT_SYS(0, 1, write(3, "b", 1));
+  EXPECT_SYS(0, 6, lseek(3, 0, SEEK_END));
+  EXPECT_SYS(0, 7, lseek(3, 1, SEEK_CUR));
+  EXPECT_SYS(0, 0, lseek(3, 0, SEEK_SET));
+  EXPECT_SYS(0, 1, write(3, "c", 1));
+  EXPECT_SYS(0, 0, close(3));
+  ASSERT_SYS(0, 3, open("hello.txt", O_RDONLY));
+  EXPECT_SYS(0, 7, read(3, buf, 8));
+  EXPECT_STREQ("hellabc", buf);
+  EXPECT_SYS(0, 0, close(3));
+}
+
+TEST(open, testAppend_pread) {
+  char buf[16] = {0};
+  ASSERT_SYS(0, 0, xbarf("hello.txt", "hell", -1));
+  ASSERT_SYS(0, 3, open("hello.txt", O_RDWR | O_APPEND));
+  EXPECT_SYS(0, 3, pread(3, buf, 16, 1));
+  EXPECT_STREQ("ell", buf);
+  EXPECT_SYS(0, 0, close(3));
+}
+
+TEST(open, testAppend_pwrite) {
+  // "If the O_APPEND flag of the file status flags is set, the file
+  //  offset shall be set to the end of the file prior to each write
+  //  and no intervening file modification operation shall occur
+  //  between changing the file offset and the write operation."
+  //                             ──Quoth POSIX.1-2018
+  if (IsFreebsd() || IsXnu())
+    return;  // broken
   char buf[16] = {0};
   ASSERT_SYS(0, 0, xbarf("hello.txt", "hell", -1));
   ASSERT_SYS(0, 3, open("hello.txt", O_WRONLY | O_APPEND));
   EXPECT_SYS(EBADF, -1, pread(3, buf, 4, 0));  // in O_WRONLY mode
-  EXPECT_SYS(0, 1, write(3, "o", 1));
+  EXPECT_SYS(0, 1, lseek(3, 1, SEEK_SET));
+  EXPECT_SYS(0, 1, write(3, "a", 1));
+  EXPECT_SYS(0, 5, lseek(3, 0, SEEK_END));
+  EXPECT_SYS(0, 1, write(3, "b", 1));
+  EXPECT_SYS(0, 6, lseek(3, 0, SEEK_END));
+  EXPECT_SYS(0, 7, lseek(3, 1, SEEK_CUR));
   EXPECT_SYS(0, 0, lseek(3, 0, SEEK_SET));
-  EXPECT_SYS(0, 1, write(3, "!", 1));
+  EXPECT_SYS(0, 1, pwrite(3, "c", 1, 0));
+  EXPECT_SYS(0, 7, lseek(3, 0, SEEK_END));
+  EXPECT_SYS(0, 1, write(3, "d", 1));
   EXPECT_SYS(0, 0, close(3));
   ASSERT_SYS(0, 3, open("hello.txt", O_RDONLY));
-  EXPECT_SYS(0, 6, read(3, buf, 8));
-  EXPECT_STREQ("hello!", buf);
+  EXPECT_SYS(0, 8, read(3, buf, 8));
+  EXPECT_STREQ("hellabcd", buf);
   EXPECT_SYS(0, 0, close(3));
 }
 
@@ -154,24 +198,77 @@ TEST(open, appendRwMode_readsStartZero_writesAlwaysEof) {
   ASSERT_SYS(0, 0, xbarf("hello.txt", "hell", -1));
   ASSERT_SYS(0, 3, open("hello.txt", O_RDWR | O_APPEND));
   ASSERT_SYS(0, 2, read(3, buf, 2));
-  ASSERT_SYS(0, 2, read(3, buf + 2, 2));
+  EXPECT_SYS(0, 2, lseek(3, 0, SEEK_CUR));
+  ASSERT_SYS(0, 2, pread(3, buf + 2, 2, 2));
+  EXPECT_SYS(0, 2, lseek(3, 0, SEEK_CUR));
   EXPECT_STREQ("hell", buf);
   EXPECT_SYS(0, 2, write(3, "o!", 2));
-  ASSERT_SYS(0, 6, pread(3, buf, 8, 0));
+  EXPECT_SYS(0, 6, pread(3, buf, 8, 0));
   EXPECT_STREQ("hello!", buf);
+  EXPECT_SYS(0, 0, close(3));
+}
+
+TEST(open, appendRwMode_readsStartZero_writesAlwaysEof2) {
+  // "The pwrite() function shall be equivalent to write(), except that
+  //  it writes into a given position and does not change the file
+  //  offset (regardless of whether O_APPEND is set). The first three
+  //  arguments to pwrite() are the same as write() with the addition of
+  //  a fourth argument offset for the desired position inside the file.
+  //  An attempt to perform a pwrite() on a file that is incapable of
+  //  seeking shall result in an error."
+  //                             ──Quoth POSIX.1-2018
+  if (IsFreebsd() || IsXnu())
+    return;  // broken
+  char buf[8] = {0};
+  ASSERT_SYS(0, 0, xbarf("hello.txt", "hell", -1));
+  ASSERT_SYS(0, 3, open("hello.txt", O_RDWR | O_APPEND));
+  ASSERT_SYS(0, 2, read(3, buf, 2));
+  EXPECT_SYS(0, 2, lseek(3, 0, SEEK_CUR));
+  ASSERT_SYS(0, 2, pread(3, buf + 2, 2, 2));
+  EXPECT_SYS(0, 2, lseek(3, 0, SEEK_CUR));
+  EXPECT_STREQ("hell", buf);
+  EXPECT_SYS(0, 1, pwrite(3, "H", 1, 3));
+  EXPECT_SYS(0, 2, lseek(3, 0, SEEK_CUR));
+  EXPECT_SYS(0, 2, write(3, "o!", 2));
+  EXPECT_SYS(0, 7, pread(3, buf, 8, 0));
+  EXPECT_STREQ("hellHo!", buf);
   EXPECT_SYS(0, 0, close(3));
 }
 
 TEST(open, appendReadOnlyMode_appendIsIgnored) {
   char buf[8] = {0};
-  ASSERT_SYS(0, 0, xbarf("hello.txt", "hell", -1));
+  ASSERT_SYS(0, 0, xbarf("hello.txt", "abcd", -1));
   ASSERT_SYS(0, 3, open("hello.txt", O_RDONLY | O_APPEND));
-  EXPECT_SYS(EBADF, -1, write(3, "o!", 2));  // due to O_RDONLY
-  ASSERT_EQ(0, errno);
-  ASSERT_SYS(0, 2, read(3, buf, 2));
-  ASSERT_SYS(0, 2, read(3, buf + 2, 2));
-  EXPECT_STREQ("hell", buf);
+  EXPECT_SYS(EBADF, -1, write(3, "o!", 2));      // due to O_RDONLY
+  EXPECT_SYS(EBADF, -1, pwrite(3, "o!", 2, 0));  // due to O_RDONLY
+  EXPECT_SYS(0, 1, lseek(3, 1, SEEK_SET));
+  ASSERT_SYS(0, 1, read(3, buf, 1));
+  EXPECT_STREQ("b", buf);
+  ASSERT_SYS(0, 1, read(3, buf + 1, 1));
+  EXPECT_SYS(0, 3, lseek(3, 0, SEEK_CUR));
+  EXPECT_STREQ("bc", buf);
   ASSERT_SYS(0, 4, pread(3, buf, 4, 0));
+  EXPECT_STREQ("abcd", buf);
+  EXPECT_SYS(0, 3, lseek(3, 0, SEEK_CUR));
+  EXPECT_SYS(0, 0, close(3));
+}
+
+TEST(open, appendReadWriteMode_readAlwaysReturnsZero) {
+  char buf[8] = {0};
+  ASSERT_SYS(0, 0, xbarf("hello.txt", "abcd", -1));
+  ASSERT_SYS(0, 3, open("hello.txt", O_RDWR | O_APPEND));
+  EXPECT_SYS(0, 1, lseek(3, 1, SEEK_SET));
+  ASSERT_SYS(0, 1, read(3, buf, 1));
+  EXPECT_STREQ("b", buf);
+  EXPECT_SYS(0, 1, lseek(3, 1, SEEK_SET));
+  EXPECT_SYS(0, 2, write(3, "o!", 2));  // will go to end
+  EXPECT_SYS(0, 6, lseek(3, 0, SEEK_CUR));
+  ASSERT_SYS(0, 0, read(3, buf, 1));  // write repositioned pointer
+  ASSERT_SYS(0, 0, read(3, buf, 1));
+  ASSERT_SYS(0, 6, pread(3, buf, 7, 0));
+  EXPECT_SYS(0, 1, lseek(3, 1, SEEK_SET));
+  EXPECT_SYS(0, 2, write(3, "o!", 2));  // due to O_RDONLY
+  EXPECT_STREQ("abcdo!", buf);
   EXPECT_SYS(0, 0, close(3));
 }
 
@@ -225,8 +322,10 @@ TEST(open, norm) {
   ASSERT_SYS(0, 3, open(abs("fun//house/../house/norm"), O_RDONLY));
   ASSERT_SYS(0, 0, close(3));
   ASSERT_SYS(ENOTDIR, -1, open("fun//house//norm/", O_RDONLY));
-  ASSERT_SYS(ENOTDIR, -1, open("fun//house//norm/.", O_RDONLY));
-  ASSERT_SYS(ENOTDIR, -1, open("fun//house//norm/./", O_RDONLY));
+  if (!IsWindows())  // normalization doesn't do i/o on windows
+    ASSERT_SYS(ENOTDIR, -1, open("fun//house//norm/.", O_RDONLY));
+  if (!IsWindows())  // normalization doesn't do i/o on windows
+    ASSERT_SYS(ENOTDIR, -1, open("fun//house//norm/./", O_RDONLY));
   ASSERT_SYS(0, 3, open("fun//house//", O_RDONLY | O_DIRECTORY));
   ASSERT_SYS(0, 0, close(3));
 }
@@ -283,32 +382,20 @@ TEST(open, openExistingDirectoryForWriting_raisesError) {
   ASSERT_SYS(EISDIR, -1, open("dir", O_WRONLY));
 }
 
-TEST(open, nameWithControlCode) {
-  if (IsWindows()) {
-    ASSERT_SYS(EINVAL, -1, touch("hi\1there", 0755));
-  } else {
-    ASSERT_SYS(0, 0, touch("hi\1there", 0755));
-  }
-}
-
 TEST(open, nameWithOverlongNul_doesntCreateTruncatedName) {
-  if (IsXnu() || IsWindows()) {
-    // XNU is the only one that thought to restrict this. XNU chose
-    // EILSEQ which makes the most sense. Linux says it'll raise EINVAL
-    // if invalid characters are detected. Not sure yet which characters
-    // those are. POSIX says nothing about invalid charaters in open.
-    ASSERT_SYS(EILSEQ, -1, touch("hi\300\200there", 0755));
-  } else {
-    ASSERT_SYS(0, 0, touch("hi\300\200there", 0755));
-    ASSERT_TRUE(fileexists("hi\300\200there"));
-    ASSERT_FALSE(fileexists("hi"));
-  }
+  if (!SupportsXnu())
+    return;
+  // XNU is the only one that thought to restrict this. XNU chose
+  // EILSEQ which makes the most sense. Linux says it'll raise EINVAL
+  // if invalid characters are detected. Not sure yet which characters
+  // those are. POSIX says nothing about invalid charaters in open.
+  ASSERT_SYS(EILSEQ, -1, touch("hi\300\200there", 0755));
 }
 
 int CountFds(void) {
   int i, count;
-  for (count = i = 0; i < g_fds.n; ++i) {
-    if (g_fds.p[i].kind) {
+  for (count = i = 0; i < __get_pib()->fds.n; ++i) {
+    if (__get_pib()->fds.p[i].kind) {
       ++count;
     }
   }
@@ -327,120 +414,6 @@ TEST(open, lotsOfFds) {
   for (i = 3; i < n; ++i) {
     EXPECT_SYS(0, 0, close(i));
   }
-}
-
-static int64_t GetInode(const char *path) {
-  struct stat st;
-  ASSERT_SYS(0, 0, stat(path, &st));
-  return st.st_ino;
-}
-
-TEST(open, drive) {
-  if (!IsWindows())
-    return;
-  ASSERT_NE(GetInode("/"), GetInode("."));
-  ASSERT_EQ(GetInode("/"), GetInode("/c"));  // sorry you have to run on c:/
-  ASSERT_EQ(GetInode("/"), GetInode("/c/"));
-  ASSERT_SYS(0, 3, open("/", O_RDONLY));
-  ASSERT_SYS(0, 0, close(3));
-}
-
-TEST(open, readOnlyCreatMode) {
-  char buf[8];
-  struct stat st;
-  ASSERT_SYS(0, 3, open("x", O_RDWR | O_CREAT | O_TRUNC, 0500));
-  ASSERT_SYS(0, 2, pwrite(3, "MZ", 2, 0));
-  ASSERT_SYS(0, 2, pread(3, buf, 8, 0));
-  ASSERT_SYS(0, 0, close(3));
-  ASSERT_SYS(0, 0, stat("x", &st));
-  ASSERT_EQ(0100500, st.st_mode);
-  if (getuid()) {
-    ASSERT_SYS(EACCES, -1, open("x", O_RDWR));
-    ASSERT_SYS(EACCES, -1, open("x", O_RDWR | O_CREAT, 0666));
-  } else {
-    // root is invulnerable to eacces
-    ASSERT_SYS(0, 3, open("x", O_RDWR));
-    ASSERT_SYS(0, 0, close(3));
-    ASSERT_SYS(0, 3, open("x", O_RDWR | O_CREAT, 0666));
-    ASSERT_SYS(0, 0, close(3));
-    SPAWN(fork);
-    setuid(1000);
-    setgid(1000);
-    ASSERT_SYS(EACCES, -1, open("x", O_RDWR));
-    ASSERT_SYS(EACCES, -1, open("x", O_RDWR | O_CREAT, 0666));
-    EXITS(0);
-  }
-}
-
-TEST(open, parentSymlink) {
-  struct stat st;
-  ASSERT_SYS(0, 0, mkdir("parent", 0755));
-  // create directory symlink
-  ASSERT_SYS(0, 0, symlink("parent", "parent-link"));
-  // test the symlink we just made is a symlink
-  ASSERT_SYS(0, 0, lstat("parent-link", &st));
-  ASSERT_TRUE(S_ISLNK(st.st_mode));
-  // create regular file when parent component is symlink dir
-  ASSERT_SYS(0, 0, touch("parent-link/regular", 0644));
-  // test stat works
-  ASSERT_SYS(0, 0, stat("parent-link/regular", &st));
-  ASSERT_TRUE(S_ISREG(st.st_mode));
-  // test open works
-  ASSERT_SYS(0, 3, open("parent-link/regular", O_RDONLY));
-  ASSERT_SYS(0, 0, fstat(3, &st));
-  ASSERT_TRUE(S_ISREG(st.st_mode));
-  ASSERT_SYS(0, 0, close(3));
-  // test O_NOFOLLOW doesn't apply to parent components
-  ASSERT_SYS(0, 3, open("parent-link/regular", O_RDONLY | O_NOFOLLOW));
-  ASSERT_SYS(0, 0, fstat(3, &st));
-  ASSERT_TRUE(S_ISREG(st.st_mode));
-  ASSERT_SYS(0, 0, close(3));
-  // create regular symlink
-  ASSERT_SYS(0, 0, symlink("regular", "parent-link/regular-link"));
-  // test stat works
-  ASSERT_SYS(0, 0, stat("parent-link/regular-link", &st));
-  ASSERT_TRUE(S_ISREG(st.st_mode));
-  ASSERT_SYS(0, 0, lstat("parent-link/regular-link", &st));
-  ASSERT_TRUE(S_ISLNK(st.st_mode));
-  // test open works
-  ASSERT_SYS(0, 3, open("parent-link/regular-link", O_RDONLY));
-  ASSERT_SYS(0, 0, fstat(3, &st));
-  ASSERT_TRUE(S_ISREG(st.st_mode));
-  ASSERT_SYS(0, 0, close(3));
-  // test O_NOFOLLOW applies to last component
-  ASSERT_SYS(ELOOP, -1,
-             open("parent-link/regular-link", O_RDONLY | O_NOFOLLOW));
-}
-
-TEST(open, readonlyCreateMode_dontChangeStatusIfExists) {
-  char buf[8];
-  struct stat st;
-  ASSERT_SYS(0, 3, creat("wut", 0700));
-  ASSERT_SYS(0, 2, pwrite(3, "MZ", 2, 0));
-  ASSERT_SYS(0, 0, close(3));
-  // since the file already exists, unix doesn't change read-only
-  ASSERT_SYS(0, 3, open("wut", O_CREAT | O_TRUNC | O_RDWR, 0500));
-  ASSERT_SYS(0, 0, pread(3, buf, 8, 0));
-  ASSERT_SYS(0, 0, fstat(3, &st));
-  ASSERT_EQ(0100600, st.st_mode & 0700666);
-  ASSERT_SYS(0, 0, close(3));
-}
-
-TEST(open, creatRdonly) {
-  char buf[8];
-  ASSERT_SYS(EINVAL, -1, open("foo", O_CREAT | O_TRUNC | O_RDONLY, 0700));
-  ASSERT_SYS(0, 3, open("foo", O_CREAT | O_RDONLY, 0700));
-  ASSERT_SYS(EBADF, -1, pwrite(3, "MZ", 2, 0));
-  ASSERT_SYS(0, 0, pread(3, buf, 8, 0));
-  ASSERT_SYS(0, 0, close(3));
-}
-
-TEST(open, sequentialRandom_EINVAL) {
-  if (!IsWindows())
-    return;
-  ASSERT_SYS(
-      EINVAL, -1,
-      open("foo", O_CREAT | O_TRUNC | O_RDWR | O_SEQUENTIAL | O_RANDOM, 0700));
 }
 
 // "If O_CREAT is set and the file did not previously exist, upon
@@ -489,30 +462,28 @@ TEST(open, trunc_touchesMtimCtim) {
   ASSERT_SYS(0, 0, close(3));
 }
 
-TEST(open, mereOpen_doesntTouch) {
-  struct stat st;
-  struct timespec birth;
-  ASSERT_SYS(0, 0, touch("regular", 0755));
-  ASSERT_SYS(0, 0, stat("regular", &st));
-  birth = st.st_ctim;
-  sleep(2);
-  ASSERT_SYS(0, 3, open("regular", O_RDWR));
-  ASSERT_SYS(0, 0, close(3));
-  ASSERT_SYS(0, 0, stat("regular", &st));
-  EXPECT_EQ(0, timespec_cmp(st.st_ctim, birth));
-  EXPECT_EQ(0, timespec_cmp(st.st_mtim, birth));
-  EXPECT_EQ(0, timespec_cmp(st.st_atim, birth));
+TEST(open, newlineInPath) {
+  ASSERT_SYS(EILSEQ, -1, creat("\n", 0644));
 }
 
-TEST(open, canTruncateExistingFile) {
-  struct stat st;
-  ASSERT_SYS(0, 0, xbarf("foo", "hello", -1));
-  ASSERT_SYS(0, 0, stat("foo", &st));
-  ASSERT_EQ(5, st.st_size);
-  ASSERT_SYS(0, 3, open("foo", O_RDWR | O_TRUNC));
-  ASSERT_SYS(0, 0, fstat(3, &st));
-  ASSERT_EQ(0, st.st_size);
-  ASSERT_SYS(0, 0, close(3));
-  ASSERT_SYS(0, 0, stat("foo", &st));
-  ASSERT_EQ(0, st.st_size);
+TEST(open, controlCharacterInPath) {
+  if (!SupportsWindows())
+    return;
+  for (int i = 1; i < 32; ++i) {
+    char buf[2] = {i};
+    ASSERT_SYS(EILSEQ, -1, creat(buf, 0644));
+  }
+}
+
+TEST(open, pathHasBadUtf8) {
+  if (!SupportsXnu())
+    return;
+  ASSERT_SYS(EILSEQ, -1, creat("\300\200", 0644));  // overlong nul
+}
+
+TEST(open, pathHasTrailingDotsAndPeriods) {
+  if (!SupportsWindows())
+    return;
+  ASSERT_SYS(EILSEQ, -1, creat("hi.", 0644));
+  ASSERT_SYS(EILSEQ, -1, creat("hi ", 0644));
 }

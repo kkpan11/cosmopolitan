@@ -16,18 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/struct/rlimit.h"
-#include "libc/dce.h"
-#include "libc/intrin/atomic.h"
-#include "libc/limits.h"
-#include "libc/macros.internal.h"
-#include "libc/runtime/runtime.h"
-#include "libc/runtime/stack.h"
 #include "libc/str/str.h"
-#include "libc/sysv/consts/auxv.h"
-#include "libc/sysv/consts/rlim.h"
-#include "libc/sysv/consts/rlimit.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 
@@ -71,10 +60,6 @@ errno_t pthread_getattr_np(pthread_t thread, pthread_attr_t *attr) {
       break;
     default:
       __builtin_unreachable();
-  }
-  if (!attr->__stacksize && (pt->pt_flags & PT_STATIC)) {
-    __get_main_stack(&attr->__stackaddr, &attr->__stacksize,
-                     &attr->__guardsize);
   }
   return 0;
 }

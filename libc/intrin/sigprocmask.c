@@ -16,19 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
 #include "libc/calls/sig.internal.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/dce.h"
-#include "libc/fmt/itoa.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
-#include "libc/str/str.h"
-#include "libc/sysv/consts/sig.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 
 /**
  * Changes signal blocking state of calling thread, e.g.:
@@ -49,21 +42,18 @@
  * @vforksafe
  */
 int sigprocmask(int how, const sigset_t *opt_set, sigset_t *opt_out_oldset) {
+  // WARNING: jart@ has noticed that Linux 6.8.0-58-generic #60-Ubuntu
+  //          has a bug where sigprocmask() isn't scalable across many
+  //          threads when opt_set is specified.
   int rc;
   sigset_t old = {0};
-  if (IsAsan() &&
-      ((opt_set && !__asan_is_valid(opt_set, sizeof(*opt_set))) ||
-       (opt_out_oldset &&
-        !__asan_is_valid(opt_out_oldset, sizeof(*opt_out_oldset))))) {
-    rc = efault();
-  } else if (IsMetal() || IsWindows()) {
+  if (IsMetal() || IsWindows()) {
     rc = __sig_mask(how, opt_set, &old);
   } else {
     rc = sys_sigprocmask(how, opt_set, opt_out_oldset ? &old : 0);
   }
-  if (rc != -1 && opt_out_oldset) {
+  if (rc != -1 && opt_out_oldset)
     *opt_out_oldset = old;
-  }
   STRACE("sigprocmask(%s, %s, [%s]) → %d% m", DescribeHow(how),
          DescribeSigset(0, opt_set), DescribeSigset(rc, opt_out_oldset), rc);
   return rc;

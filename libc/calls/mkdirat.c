@@ -19,10 +19,11 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/consts/at.h"
@@ -37,10 +38,15 @@
  * @param mode is permissions bits, which is usually 0755
  * @return 0 on success, or -1 w/ errno
  * @raise EEXIST if named file already exists
+ * @raise EPERM if pledge() is in play w/o `cpath` promise
+ * @raise EPERM if `mode & 07000` is not authorized or nonzero on Windows
  * @raise EBADF if `path` is relative and `dirfd` isn't `AT_FDCWD` or valid
  * @raise ENOTDIR if directory component in `path` existed as non-directory
  * @raise ENAMETOOLONG if symlink-resolved `path` length exceeds `PATH_MAX`
  * @raise ENAMETOOLONG if component in `path` exists longer than `NAME_MAX`
+ * @raise EILSEQ if last component had newline or malformed utf-8 sequences
+ * @raise EILSEQ on Windows if last component had trailing dots or spaces
+ * @raise EROFS if `path` is on the synthetic `/zip/...` filesystem
  * @raise EROFS if parent directory is on read-only filesystem
  * @raise ENOSPC if file system or parent directory is full
  * @raise EACCES if write permission was denied on parent directory
@@ -53,11 +59,13 @@
  */
 int mkdirat(int dirfd, const char *path, unsigned mode) {
   int rc;
-  if (IsAsan() && !__asan_is_valid_str(path)) {
+  if (kisdangerous(path)) {
     rc = efault();
+  } else if (__is_evil_path(path)) {
+    rc = eilseq();
   } else if (_weaken(__zipos_notat) &&
              (rc = __zipos_notat(dirfd, path)) == -1) {
-    STRACE("zipos mkdirat not supported yet");
+    rc = erofs();
   } else if (!IsWindows()) {
     rc = sys_mkdirat(dirfd, path, mode);
   } else {

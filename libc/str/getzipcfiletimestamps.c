@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/wintime.internal.h"
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 
 static inline int pop(int x) {
   return !!(x & 1) + !!(x & 2) + !!(x & 4);
@@ -28,7 +28,7 @@ static inline int pop(int x) {
  *
  * @param cf is pointer to central directory header for file
  * @param mtim optionally receives last modified timestamp
- * @param atim optionally receives modified timestamp
+ * @param atim optionally receives accessed timestamp
  * @param ctim optionally receives creation timestamp
  * @param gmtoff is seconds adjustment for legacy dos timestamps
  */

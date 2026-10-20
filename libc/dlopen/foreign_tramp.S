@@ -16,7 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/dce.h"
+#include "libc/macros.h"
 
 #define SIZE 0x0200
 #define SKEW 0x10
@@ -55,7 +56,11 @@ foreign_tramp:
 	mov	%rax,-0xc0(%rbp)
 
 //	switch to foreign tls
-	mov	%gs:0x30,%rax
+#if SupportsXnu() || SupportsWindows()
+	call	__get_tls_rax
+#else
+	mov	%fs:0x30,%rax
+#endif
 	mov	%rax,-0xc8(%rbp)
 	mov	__foreign+8(%rip),%rdi
 	call	__set_tls

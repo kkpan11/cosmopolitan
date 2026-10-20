@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/getenv.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/getenv.h"
+#include "libc/intrin/strace.h"
 #include "libc/runtime/runtime.h"
 
 /**
@@ -34,11 +34,6 @@ char *getenv(const char *s) {
   if (!(p = environ))
     return 0;
   e = __getenv(p, s);
-#if SYSDEBUG
-  // if (!(s[0] == 'T' && s[1] == 'Z' && !s[2])) {
-  // TODO(jart): memoize TZ or something
   STRACE("getenv(%#s) → %#s", s, e.s);
-  //}
-#endif
   return e.s;
 }

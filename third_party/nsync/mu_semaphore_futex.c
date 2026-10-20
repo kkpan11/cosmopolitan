@@ -21,14 +21,14 @@
 #include "libc/thread/thread.h"
 #include "third_party/nsync/atomic.h"
 #include "third_party/nsync/atomic.internal.h"
-#include "third_party/nsync/futex.internal.h"
+#include "libc/cosmo.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/cosmo.h"
 #include "third_party/nsync/mu_semaphore.internal.h"
 
 /**
  * @fileoverview Semaphores w/ Linux Futexes API.
  */
-
-#define ASSERT(x) npassert(x)
 
 /* Check that atomic operations on nsync_atomic_uint32_ can be applied to int. */
 static const int assert_int_size = 1 /
@@ -43,9 +43,13 @@ static nsync_semaphore *sem_big_enough_for_futex = (nsync_semaphore *) (uintptr_
 	(sizeof (struct futex) <= sizeof (*sem_big_enough_for_futex)));
 
 /* Initialize *s; the initial value is 0. */
-void nsync_mu_semaphore_init_futex (nsync_semaphore *s) {
+bool nsync_mu_semaphore_init_futex (nsync_semaphore *s) {
 	struct futex *f = (struct futex *) s;
 	f->i = 0;
+	return true;
+}
+
+void nsync_mu_semaphore_destroy_futex (nsync_semaphore *s) {
 }
 
 /* Wait until the count of *s exceeds 0, and decrement it. If POSIX cancellations
@@ -60,19 +64,22 @@ errno_t nsync_mu_semaphore_p_futex (nsync_semaphore *s) {
 		i = ATM_LOAD ((nsync_atomic_uint32_ *) &f->i);
 		if (i == 0) {
 			int futex_result;
-			futex_result = -nsync_futex_wait_ (
+			futex_result = -cosmo_futex_wait (
 				(atomic_int *)&f->i, i,
-				PTHREAD_PROCESS_PRIVATE, 0);
-			ASSERT (futex_result == 0 ||
-				futex_result == EINTR ||
-				futex_result == EAGAIN ||
-				futex_result == ECANCELED ||
-				futex_result == EWOULDBLOCK);
+				PTHREAD_PROCESS_PRIVATE, 0, 0);
+			unassert (futex_result == 0 ||
+				  futex_result == EINTR ||
+				  futex_result == EAGAIN ||
+				  futex_result == ECANCELED ||
+				  futex_result == EWOULDBLOCK);
 			if (futex_result == ECANCELED) {
 				result = ECANCELED;
 			}
 		}
-	} while (result == 0 && (i == 0 || !ATM_CAS_ACQ ((nsync_atomic_uint32_ *) &f->i, i, i-1)));
+	} while (result == 0 && (i == 0 ||
+				 !atomic_compare_exchange_weak_explicit (
+					 (nsync_atomic_uint32_ *) &f->i, &i, i-1,
+					 memory_order_acquire, memory_order_relaxed)));
 	return result;
 }
 
@@ -80,7 +87,7 @@ errno_t nsync_mu_semaphore_p_futex (nsync_semaphore *s) {
    while additionally supporting a time parameter specifying at what point
    in the future ETIMEDOUT should be returned, if neither cancellation, or
    semaphore release happens. */
-errno_t nsync_mu_semaphore_p_with_deadline_futex (nsync_semaphore *s, nsync_time abs_deadline) {
+errno_t nsync_mu_semaphore_p_with_deadline_futex (nsync_semaphore *s, int clock, nsync_time abs_deadline) {
 	struct futex *f = (struct futex *)s;
 	int i;
 	int result = 0;
@@ -96,33 +103,45 @@ errno_t nsync_mu_semaphore_p_with_deadline_futex (nsync_semaphore *s, nsync_time
 				ts_buf.tv_nsec = NSYNC_TIME_NSEC (abs_deadline);
 				ts = &ts_buf;
 			}
-			futex_result = nsync_futex_wait_ ((atomic_int *)&f->i, i,
-							  PTHREAD_PROCESS_PRIVATE, ts);
-			ASSERT (futex_result == 0 ||
-				futex_result == -EINTR ||
-				futex_result == -EAGAIN ||
-				futex_result == -ECANCELED ||
-				futex_result == -ETIMEDOUT ||
-				futex_result == -EWOULDBLOCK);
+			futex_result = cosmo_futex_wait ((atomic_int *)&f->i, i,
+							 PTHREAD_PROCESS_PRIVATE,
+							 clock, ts);
+			unassert (futex_result == 0 ||
+				  futex_result == -EINTR ||
+				  futex_result == -EINVAL ||
+				  futex_result == -EAGAIN ||
+				  futex_result == -ECANCELED ||
+				  futex_result == -ETIMEDOUT ||
+				  futex_result == -EWOULDBLOCK);
 			/* Some systems don't wait as long as they are told. */
-			if (futex_result == -ETIMEDOUT &&
-			    nsync_time_cmp (abs_deadline, nsync_time_now ()) <= 0) {
-				result = ETIMEDOUT;
+			if (futex_result == -ETIMEDOUT) {
+				nsync_time now;
+				if (clock_gettime (clock, &now))
+					result = EINVAL;
+				if (nsync_time_cmp (now, abs_deadline) >= 0)
+					result = ETIMEDOUT;
 			}
 			if (futex_result == -ECANCELED) {
 				result = ECANCELED;
 			}
+			if (futex_result == -EINVAL) {
+				result = EINVAL;
+			}
 		}
-	} while (result == 0 && (i == 0 || !ATM_CAS_ACQ ((nsync_atomic_uint32_ *) &f->i, i, i - 1)));
+	} while (result == 0 && (i == 0 ||
+				 !atomic_compare_exchange_weak_explicit (
+					 (nsync_atomic_uint32_ *) &f->i, &i, i-1,
+					 memory_order_acquire, memory_order_relaxed)));
 	return (result);
 }
 
 /* Ensure that the count of *s is at least 1. */
 void nsync_mu_semaphore_v_futex (nsync_semaphore *s) {
 	struct futex *f = (struct futex *) s;
-        uint32_t old_value;
-	do {
-		old_value = ATM_LOAD ((nsync_atomic_uint32_ *) &f->i);
-	} while (!ATM_CAS_REL ((nsync_atomic_uint32_ *) &f->i, old_value, old_value+1));
-	ASSERT (nsync_futex_wake_ ((atomic_int *)&f->i, 1, PTHREAD_PROCESS_PRIVATE) >= 0);
+        uint32_t old_value = ATM_LOAD ((nsync_atomic_uint32_ *) &f->i);
+	while (!atomic_compare_exchange_weak_explicit (
+		       (nsync_atomic_uint32_ *) &f->i, &old_value, old_value+1,
+		       memory_order_release, memory_order_relaxed)) {
+	}
+	unassert (cosmo_futex_wake ((atomic_int *) &f->i, 1, PTHREAD_PROCESS_PRIVATE) >= 0);
 }

@@ -557,7 +557,8 @@ function OnHttpRequest() end
 ---
 ---@param status uint16
 ---@param message string
-function OnError(status, message) end
+---@param details string
+function OnError(status, message, details) end
 
 --- Hooks client connection creation.
 ---
@@ -1981,6 +1982,10 @@ function Underlong(str) end
 --- @return string
 function UuidV4() end
 
+--- Generate a uuid_v7
+--- @return string
+function UuidV7() end
+
 ---@param x integer
 ---@return integer # position of first bit set.
 --- Passing `0` will raise an error. Same as the Intel x86 instruction BSF.
@@ -2982,7 +2987,7 @@ function Database:db_filename(name) end
 function Database:deserialize(s) end
 
 ---@return integer error the numerical result code (or extended result code) for the most recent failed call associated with database db.
---- See http://lua.sqlite.org/index.cgi/doc/tip/doc/lsqlite3.wiki#numerical_error_and_result_codes for details.
+--- See https://lua.sqlite.org/home/doc/tip/doc/lsqlite3.wiki#numerical_error_and_result_codes for details.
 ---@nodiscard
 function Database:error_code() end
 
@@ -3099,7 +3104,7 @@ function Database:nrows(sql) end
 --- representation and returns this as userdata. The returned object should be
 --- used for all further method calls in connection with this specific SQL
 --- statement.
---- See http://lua.sqlite.org/index.cgi/doc/tip/doc/lsqlite3.wiki#methods_for_prepared_statements.
+--- See https://lua.sqlite.org/home/doc/tip/doc/lsqlite3.wiki#methods_for_prepared_statements for details.
 ---@param sql string
 ---@return lsqlite3.Statement
 ---@nodiscard
@@ -4125,37 +4130,21 @@ unix = {
     CLK_TCK = nil,
 
     --- @type integer
-    CLOCK_BOOTTIME = nil,
-    --- @type integer
-    CLOCK_BOOTTIME_ALARM = nil,
+    CLOCK_REALTIME = nil,
     --- @type integer
     CLOCK_MONOTONIC = nil,
     --- @type integer
-    CLOCK_MONOTONIC_COARSE = nil,
-    --- @type integer
-    CLOCK_MONOTONIC_PRECISE = nil,
-    --- @type integer
-    CLOCK_MONOTONIC_FAST = nil,
+    CLOCK_BOOTTIME = nil,
     --- @type integer
     CLOCK_MONOTONIC_RAW = nil,
     --- @type integer
-    CLOCK_PROCESS_CPUTIME_ID = nil,
-    --- @type integer
-    CLOCK_PROF = nil,
-    --- @type integer
-    CLOCK_REALTIME = nil,
-    --- @type integer
-    CLOCK_REALTIME_PRECISE = nil,
-    --- @type integer
-    CLOCK_REALTIME_ALARM = nil,
-    --- @type integer
     CLOCK_REALTIME_COARSE = nil,
     --- @type integer
-    CLOCK_REALTIME_FAST = nil,
-    --- @type integer
-    CLOCK_TAI = nil,
+    CLOCK_MONOTONIC_COARSE = nil,
     ---@type integer
     CLOCK_THREAD_CPUTIME_ID = nil,
+    --- @type integer
+    CLOCK_PROCESS_CPUTIME_ID = nil,
     --- @type integer
     DT_BLK = nil,
     --- @type integer
@@ -4629,39 +4618,23 @@ unix = {
     O_TMPFILE = nil,
     --- @type integer fail if it's a symlink (zero on Windows)
     O_NOFOLLOW = nil,
+    --- @type integer automatically delete file upon close()
+    O_UNLINK = nil,
     --- @type integer it's complicated (zero on non-Linux/Apple)
     O_DSYNC = nil,
     --- @type integer it's complicated (zero on non-Linux/Apple)
     O_RSYNC = nil,
-    --- @type integer it's complicated (zero on non-Linux)
-    O_PATH = nil,
-    --- @type integer it's complicated (zero on non-FreeBSD)
-    O_VERIFY = nil,
-    --- @type integer it's complicated (zero on non-BSD)
-    O_SHLOCK = nil,
-    --- @type integer it's complicated (zero on non-BSD)
-    O_EXLOCK = nil,
+    --- @type integer synchronize i/o operations appropriately
+    O_SYNC = nil,
     --- @type integer don't record access time (zero on non-Linux)
     O_NOATIME = nil,
-    --- @type integer hint random access intent (zero on non-Windows)
-    O_RANDOM = nil,
-    --- @type integer hint sequential access intent (zero on non-Windows)
-    O_SEQUENTIAL = nil,
-    --- @type integer ask fs to abstract compression (zero on non-Windows)
-    O_COMPRESSED = nil,
-    --- @type integer turns on that slow performance (zero on non-Windows)
-    O_INDEXED = nil,
 
     --- @type integer
     O_ACCMODE = nil,
     --- @type integer
-    O_ASYNC = nil,
-    --- @type integer
     O_EXEC = nil,
     --- @type integer
     O_NOCTTY = nil,
-    --- @type integer
-    O_SEARCH = nil,
     --- @type integer
     O_SYNC = nil,
 
@@ -4970,6 +4943,8 @@ unix = {
 
     --- @type integer
     WNOHANG = nil,
+    --- @type integer
+    WUNTRACED = nil,
 
     --- @type integer
     W_OK = nil,
@@ -5000,21 +4975,14 @@ unix = {
 ---  - `O_EXCL`       exclusive access (see below)
 ---  - `O_APPEND`     open file for append only
 ---  - `O_NONBLOCK`   asks read/write to fail with EAGAIN rather than block
----  - `O_DIRECT`     it's complicated (not supported on Apple and OpenBSD)
 ---  - `O_DIRECTORY`  useful for stat'ing (hint on UNIX but required on NT)
----  - `O_TMPFILE`    try to make temp more secure (Linux and Windows only)
 ---  - `O_NOFOLLOW`   fail if it's a symlink (zero on Windows)
----  - `O_DSYNC`      it's complicated (zero on non-Linux/Apple)
----  - `O_RSYNC`      it's complicated (zero on non-Linux/Apple)
----  - `O_PATH`       it's complicated (zero on non-Linux)
----  - `O_VERIFY`     it's complicated (zero on non-FreeBSD)
----  - `O_SHLOCK`     it's complicated (zero on non-BSD)
----  - `O_EXLOCK`     it's complicated (zero on non-BSD)
+---  - `O_UNLINK`     automatically delete file upon close()
+---  - `O_SYNC`       makes file operations synchronize appropriately
+---  - `O_RSYNC`      synchronize read() operations
+---  - `O_DSYNC`      synchronize write() operations
+---  - `O_DIRECT`     it's complicated (not supported on Apple and OpenBSD)
 ---  - `O_NOATIME`    don't record access time (zero on non-Linux)
----  - `O_RANDOM`     hint random access intent (zero on non-Windows)
----  - `O_SEQUENTIAL` hint sequential access intent (zero on non-Windows)
----  - `O_COMPRESSED` ask fs to abstract compression (zero on non-Windows)
----  - `O_INDEXED`    turns on that slow performance (zero on non-Windows)
 ---
 ---  There are three regular combinations for the above flags:
 ---
@@ -5200,11 +5168,14 @@ function unix.fork() end
 ---     unix.execve(prog, {prog, '-hal', '.'}, {'PATH=/bin'})
 ---     unix.exit(127)
 ---
---- We automatically suffix `.com` and `.exe` for all platforms when
---- path searching. By default, the current directory is not on the
---- path. If `prog` is an absolute path, then it's returned as-is. If
---- `prog` contains slashes then it's not path searched either and will
---- be returned if it exists.
+--- If `prog` is an absolute path, then it's returned as-is. If `prog`
+--- contains slashes then it's not path searched either and will be
+--- returned if it exists. On Windows, it's recommended that you install
+--- programs from cosmos to c:/bin/ without any .exe or .com suffix, so
+--- they can be discovered like they would on UNIX. If you want to find
+--- a program like notepad on the $PATH using this function, then you
+--- need to specify "notepad.exe" so it includes the extension.
+---
 ---@param prog string
 ---@return string path
 ---@overload fun(prog: string): nil, error: unix.Errno
@@ -5770,10 +5741,7 @@ function unix.rmrf(path) end
 ---   - `O_NONBLOCK`
 ---   - `O_APPEND`
 ---   - `O_SYNC`
----   - `O_ASYNC`
 ---   - `O_NOATIME` on Linux
----   - `O_RANDOM` on Windows
----   - `O_SEQUENTIAL` on Windows
 ---   - `O_DIRECT` on Linux/FreeBSD/NetBSD/Windows
 ---
 ---   Examples of values `flags & ~unix.O_ACCMODE` won't include:
@@ -5796,10 +5764,7 @@ function unix.rmrf(path) end
 ---   - `O_NONBLOCK`
 ---   - `O_APPEND`
 ---   - `O_SYNC`
----   - `O_ASYNC`
 ---   - `O_NOATIME` on Linux
----   - `O_RANDOM` on Windows
----   - `O_SEQUENTIAL` on Windows
 ---   - `O_DIRECT` on Linux/FreeBSD/NetBSD/Windows
 ---
 ---   These values should be ignored:
@@ -6093,23 +6058,73 @@ function unix.syslog(priority, msg) end
 ---
 --- `clock` can be any one of of:
 ---
---- - `CLOCK_REALTIME`: universally supported
---- - `CLOCK_REALTIME_FAST`: ditto but faster on freebsd
---- - `CLOCK_REALTIME_PRECISE`: ditto but better on freebsd
---- - `CLOCK_REALTIME_COARSE`: : like `CLOCK_REALTIME_FAST` but needs Linux 2.6.32+
---- - `CLOCK_MONOTONIC`: universally supported
---- - `CLOCK_MONOTONIC_FAST`: ditto but faster on freebsd
---- - `CLOCK_MONOTONIC_PRECISE`: ditto but better on freebsd
---- - `CLOCK_MONOTONIC_COARSE`: : like `CLOCK_MONOTONIC_FAST` but needs Linux 2.6.32+
---- - `CLOCK_MONOTONIC_RAW`: is actually monotonic but needs Linux 2.6.28+
---- - `CLOCK_PROCESS_CPUTIME_ID`: linux and bsd
---- - `CLOCK_THREAD_CPUTIME_ID`: linux and bsd
---- - `CLOCK_MONOTONIC_COARSE`: linux, freebsd
---- - `CLOCK_PROF`: linux and netbsd
---- - `CLOCK_BOOTTIME`: linux and openbsd
---- - `CLOCK_REALTIME_ALARM`: linux-only
---- - `CLOCK_BOOTTIME_ALARM`: linux-only
---- - `CLOCK_TAI`: linux-only
+--- - `CLOCK_REALTIME` returns a wall clock timestamp represented in
+---   nanoseconds since the UNIX epoch (~1970). It'll count time in the
+---   suspend state. This clock is subject to being smeared by various
+---   adjustments made by NTP. These timestamps can have unpredictable
+---   discontinuous jumps when clock_settime() is used. Therefore this
+---   clock is the default clock for everything, even pthread condition
+---   variables. Cosmopoiltan guarantees this clock will never raise
+---   `EINVAL` and also guarantees `CLOCK_REALTIME == 0` will always be
+---   the case. On Windows this maps to GetSystemTimePreciseAsFileTime().
+---   On platforms with vDSOs like Linux, Windows, and MacOS ARM64 this
+---   should take about 20 nanoseconds.
+---
+--- - `CLOCK_MONOTONIC` returns a timestamp with an unspecified epoch,
+---   that should be when the system was powered on. These timestamps
+---   shouldn't go backwards. Timestamps shouldn't count time spent in
+---   the sleep, suspend, and hibernation states. These timestamps won't
+---   be impacted by clock_settime(). These timestamps may be impacted by
+---   frequency adjustments made by NTP. Cosmopoiltan guarantees this
+---   clock will never raise `EINVAL`. MacOS and BSDs use the word
+---   "uptime" to describe this clock. On Windows this maps to
+---   QueryUnbiasedInterruptTimePrecise().
+---
+--- - `CLOCK_BOOTTIME` is a monotonic clock returning a timestamp with an
+---   unspecified epoch, that should be relative to when the host system
+---   was powered on. These timestamps shouldn't go backwards. Timestamps
+---   should also include time spent in a sleep, suspend, or hibernation
+---   state. These timestamps aren't impacted by clock_settime(), but
+---   they may be impacted by frequency adjustments made by NTP. This
+---   clock will raise an `EINVAL` error on extremely old Linux distros
+---   like RHEL5. MacOS and BSDs use the word "monotonic" to describe
+---   this clock. On Windows this maps to QueryInterruptTimePrecise().
+---
+--- - `CLOCK_MONOTONIC_RAW` returns a timestamp from an unspecified
+---   epoch. These timestamps don't count time spent in the sleep,
+---   suspend, and hibernation states. Unlike `CLOCK_MONOTONIC` this
+---   clock is guaranteed to not be impacted by frequency adjustments or
+---   discontinuous jumps caused by clock_settime(). Providing this level
+---   of assurances may make this clock slower than the normal monotonic
+---   clock. Furthermore this clock may cause `EINVAL` to be raised if
+---   running on a host system that doesn't provide those guarantees,
+---   e.g. OpenBSD and MacOS on AMD64.
+---
+--- - `CLOCK_REALTIME_COARSE` is the same as `CLOCK_REALTIME` except
+---   it'll go faster if the host OS provides a cheaper way to read the
+---   wall time. Please be warned that coarse can be really coarse.
+---   Rather than nano precision, you're looking at `CLK_TCK` precision,
+---   which can lag as far as 30 milliseconds behind or possibly more.
+---   Cosmopolitan may fallback to `CLOCK_REALTIME` if a faster less
+---   accurate clock isn't provided by the system. This clock will raise
+---   an `EINVAL` error on extremely old Linux distros like RHEL5.
+---
+--- - `CLOCK_MONOTONIC_COARSE` is the same as `CLOCK_MONOTONIC` except
+---   it'll go faster if the host OS provides a cheaper way to read the
+---   unbiased time. Please be warned that coarse can be really coarse.
+---   Rather than nano precision, you're looking at `CLK_TCK` precision,
+---   which can lag as far as 30 milliseconds behind or possibly more.
+---   Cosmopolitan may fallback to `CLOCK_REALTIME` if a faster less
+---   accurate clock isn't provided by the system. This clock will raise
+---   an `EINVAL` error on extremely old Linux distros like RHEL5.
+---
+--- - `CLOCK_PROCESS_CPUTIME_ID` returns the amount of time this process
+---   was actively scheduled. This is similar to getrusage() and clock().
+---   Cosmopoiltan guarantees this clock will never raise `EINVAL`.
+---
+--- - `CLOCK_THREAD_CPUTIME_ID` returns the amount of time this thread
+---   was actively scheduled. This is similar to getrusage() and clock().
+---   Cosmopoiltan guarantees this clock will never raise `EINVAL`.
 ---
 --- Returns `EINVAL` if clock isn't supported on platform.
 ---
@@ -7831,18 +7846,6 @@ function unix.Stat:ctim() end
 --- This provides some indication of how much physical storage a file
 --- actually consumes. For example, for small file systems, your system
 --- might report this number as being 8, which means 4096 bytes.
----
---- On Windows NT, if `O_COMPRESSED` is used for a file, then this
---- number will reflect the size *after* compression. you can use:
----
----     st = assert(unix.stat("moby.txt"))
----     print('file size is %d bytes' % {st:size()})
----     print('file takes up %d bytes of space' % {st:blocks() * 512})
----     if GetHostOs() == 'WINDOWS' and st:flags() & 0x800 then
----        print('thanks to file system compression')
----     end
----
---- To tell whether or not compression is being used on a file,
 function unix.Stat:blocks() end
 
 ---@return integer bytes Block size that underlying device uses.

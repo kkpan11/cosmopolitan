@@ -14,7 +14,7 @@
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -57,7 +57,7 @@ static int outfd;
 static const char *prog;
 static const char *outpath;
 
-static wontreturn void PrintUsage(int fd, int rc) {
+[[noreturn]] static void PrintUsage(int fd, int rc) {
   tinyprint(fd, "usage: ", prog, " [-iksvV] URL\n", NULL);
   exit(rc);
 }

@@ -34,6 +34,7 @@
 
 COSMOPOLITAN_C_START_
 
+void *LocalAlloc(uint32_t uFlags, size_t uBytes);
 void *LocalFree(void *hMem);
 
 int64_t CreateFileMapping(
@@ -71,8 +72,17 @@ bool32 VirtualUnlock(const void *lpAddress, size_t dwSize);
 uint64_t VirtualQuery(const void *lpAddress,
                       struct NtMemoryBasicInformation *lpBuffer,
                       uint64_t dwLength);
+uint64_t VirtualQueryEx(int64_t hProcess, const void *lpAddress,
+                        struct NtMemoryBasicInformation *lpBuffer,
+                        uint64_t dwLength);
+
 void *VirtualAllocEx(int64_t hProcess, void *lpAddress, uint64_t dwSize,
                      uint32_t flAllocationType, uint32_t flProtect);
+bool32 VirtualProtectEx(int64_t hProcess, void *lpAddress, uint64_t dwSize,
+                        uint32_t flNewProtect, uint32_t *out_lpflOldProtect);
+bool32 WriteProcessMemory(int64_t hProcess, void *lpBaseAddress,
+                          const void *lpBuffer, uint64_t nSize,
+                          uint64_t *opt_out_lpNumberOfBytesWritten);
 
 int64_t GetProcessHeap(void);
 void *HeapAlloc(int64_t hHeap, uint32_t dwFlags, size_t dwBytes) __wur;
@@ -101,6 +111,12 @@ void *VirtualAlloc2(
     unsigned AllocationType, unsigned PageProtection,
     struct NtMemExtendedParameter *in_out_opt_ExtendedParameters,
     unsigned ParameterCount);
+
+bool32 PrefetchVirtualMemory(int64_t hProcess, uintptr_t NumberOfEntries,
+                             struct NtMemoryRangeEntry *VirtualAddresses,
+                             uint32_t reserved_Flags);
+bool32 OfferVirtualMemory(void *inout_VirtualAddress, size_t Size,
+                          int Priority);
 
 #if ShouldUseMsabiAttribute()
 #include "libc/nt/thunk/memory.inc"

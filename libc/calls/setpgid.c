@@ -19,7 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 
 /**
  * Changes process group for process.
@@ -31,10 +31,10 @@
  */
 int setpgid(int pid, int pgid) {
   int rc;
-  if (!IsWindows()) {
+  if (!IsWindows() && !IsMetal()) {
     rc = sys_setpgid(pid, pgid);
   } else {
-    rc = 0;  // not sure what to do on windows yet
+    rc = 0;
   }
   STRACE("setpgid(%d, %d) → %d% m", pid, pgid, rc);
   return rc;

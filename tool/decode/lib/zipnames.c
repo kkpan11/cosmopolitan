@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "tool/decode/lib/zipnames.h"
 #include "libc/nt/enum/fileflagandattributes.h"
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 
 const struct IdName kZipCompressionNames[] = {
     {kZipCompressionNone, "kZipCompressionNone"},
@@ -36,7 +36,6 @@ const struct IdName kZipExtraNames[] = {
 };
 
 const struct IdName kZipIattrNames[] = {
-    {kZipIattrBinary, "kZipIattrBinary"},
     {kZipIattrText, "kZipIattrText"},
     {0, 0},
 };

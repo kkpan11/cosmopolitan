@@ -24,7 +24,7 @@
 #include "libc/calls/struct/timespec.h"
 #include "libc/errno.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/sockaddr.h"
@@ -45,6 +45,7 @@
 #include "third_party/python/Include/pyerrors.h"
 #include "third_party/python/Include/pymacro.h"
 #include "libc/serialize.h"
+#include "libc/cosmotime.h"
 #include "third_party/python/Include/yoink.h"
 
 PYTHON_PROVIDE("tokenbucket");

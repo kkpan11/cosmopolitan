@@ -17,29 +17,28 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
+#include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timespec.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/cosmotime.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/atomic.h"
-#include "libc/sysv/consts/timer.h"
-#include "libc/thread/tls.h"
-#ifdef __x86_64__
+#include "libc/nt/thunk/msabi.h"
+#include "libc/nt/winmm.h"
+#if SupportsWindows()
 
 static textwindows int sys_clock_nanosleep_nt_impl(int clock,
                                                    struct timespec abs,
                                                    sigset_t waitmask) {
-  uint32_t msdelay;
-  struct timespec now;
-  for (;;) {
-    if (sys_clock_gettime_nt(clock, &now))
-      return -1;
-    if (timespec_cmp(now, abs) >= 0)
-      return 0;
-    msdelay = timespec_tomillis(timespec_sub(abs, now));
-    if (_park_norestart(msdelay, waitmask))
-      return -1;
-  }
+  struct timespec now, wall;
+  sys_clock_gettime_nt(0, &wall);
+  if (sys_clock_gettime_nt(clock, &now))
+    return -1;
+  if (timespec_cmp(abs, now) > 0)
+    wall = timespec_add(wall, timespec_sub(abs, now));
+  return _park_norestart(wall, waitmask);
 }
 
 textwindows int sys_clock_nanosleep_nt(int clock, int flags,
@@ -48,21 +47,28 @@ textwindows int sys_clock_nanosleep_nt(int clock, int flags,
   int rc;
   struct timespec abs, now;
   sigset_t m = __sig_block();
-  if (flags & TIMER_ABSTIME) {
+  if (flags) {
     abs = *req;
   } else {
-    if ((rc = sys_clock_gettime_nt(clock, &now)))
+    if ((rc = sys_clock_gettime_nt(clock, &now))) {
+      rc = _sysret(rc);
       goto BailOut;
+    }
     abs = timespec_add(now, *req);
   }
   rc = sys_clock_nanosleep_nt_impl(clock, abs, m);
-  if (rc == -1 && rem && errno == EINTR) {
+  if (rc == -1 && !flags && rem && errno == EINTR) {
     sys_clock_gettime_nt(clock, &now);
     *rem = timespec_subz(abs, now);
   }
 BailOut:
   __sig_unblock(m);
   return rc;
+}
+
+// called by WinMain() if clock_nanosleep() is linked
+__msabi textwindows dontinstrument void sys_clock_nanosleep_nt_init(void) {
+  __imp_timeBeginPeriod(1);  // make sleep(1ms) not take 15ms
 }
 
 #endif /* __x86_64__ */

@@ -20,12 +20,12 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/elf/def.h"
+#include "libc/intrin/maps.h"
 #include "libc/log/check.h"
 #include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/memtrack.internal.h"
-#include "libc/stdalign.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/msync.h"
@@ -162,9 +162,9 @@ struct ElfWriter *elfwriter_open(const char *path, int mode, int arch) {
   CHECK_NOTNULL((elf = calloc(1, sizeof(struct ElfWriter))));
   CHECK_NOTNULL((elf->path = strdup(path)));
   CHECK_NE(-1, (elf->fd = open(elf->path, O_CREAT | O_TRUNC | O_RDWR, mode)));
-  CHECK_NE(-1, ftruncate(elf->fd, (elf->mapsize = FRAMESIZE)));
-  CHECK_NE(MAP_FAILED, (elf->map = mmap((void *)(intptr_t)kFixedmapStart,
-                                        elf->mapsize, PROT_READ | PROT_WRITE,
+  CHECK_NE(-1, ftruncate(elf->fd, (elf->mapsize = getgransize())));
+  CHECK_NE(MAP_FAILED, (elf->map = mmap(__maps_randaddr(), elf->mapsize,
+                                        PROT_READ | PROT_WRITE,
                                         MAP_SHARED | MAP_FIXED, elf->fd, 0)));
   elf->ehdr = memcpy(elf->map, &kObjHeader, (elf->wrote = sizeof(kObjHeader)));
   if (!arch) {
@@ -233,7 +233,7 @@ void *elfwriter_reserve(struct ElfWriter *elf, size_t size) {
     do {
       greed = greed + (greed >> 1);
     } while (need > greed);
-    greed = ROUNDUP(greed, FRAMESIZE);
+    greed = ROUNDUP(greed, getgransize());
     CHECK_NE(-1, ftruncate(elf->fd, greed));
     CHECK_NE(MAP_FAILED, mmap((char *)elf->map + elf->mapsize,
                               greed - elf->mapsize, PROT_READ | PROT_WRITE,

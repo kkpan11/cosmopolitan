@@ -18,12 +18,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/enum/processcreationflags.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
-#include "libc/proc/proc.internal.h"
+#include "libc/proc/proc.h"
 #include "libc/sysv/consts/prio.h"
 #include "libc/sysv/errfuns.h"
 

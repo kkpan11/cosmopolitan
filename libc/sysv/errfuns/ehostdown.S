@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 ehostdown:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	EHOSTDOWN(%rip),%ecx
+	push	$EHOSTDOWN
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,EHOSTDOWN
-	ldrsw	x0,[x1,#:lo12:EHOSTDOWN]
+	mov	x0,#EHOSTDOWN
 	b	__errfun
 #else
 #error "unsupported architecture"

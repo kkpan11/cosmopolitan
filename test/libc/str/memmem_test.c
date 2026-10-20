@@ -17,10 +17,18 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/mem/mem.h"
+#include "libc/assert.h"
+#include "libc/bsdstdlib.h"
+#include "libc/calls/calls.h"
 #include "libc/intrin/likely.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/mem/alg.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/sysconf.h"
 #include "libc/stdio/rand.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/map.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
@@ -162,8 +170,8 @@ TEST(memmem, fuzz) {
   int i, n, m;
   char a[128], b[128], *p, *q;
   for (i = 0; i < 10000; ++i) {
-    rngset(a, sizeof(a), lemur64, -1);
-    rngset(b, sizeof(b), lemur64, -1);
+    arc4random_buf(a, sizeof(a));
+    arc4random_buf(b, sizeof(b));
     p = a + lemur64() % sizeof(a) / 2;
     q = b + lemur64() % sizeof(b) / 2;
     n = lemur64() % sizeof(a) / 2;
@@ -172,10 +180,30 @@ TEST(memmem, fuzz) {
   }
 }
 
+TEST(memmem, safety) {
+  int pagesz = sysconf(_SC_PAGESIZE);
+  char *map = (char *)mmap(0, pagesz * 2, PROT_READ | PROT_WRITE,
+                           MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  npassert(map != MAP_FAILED);
+  npassert(!mprotect(map + pagesz, pagesz, PROT_NONE));
+  for (int haylen = 1; haylen < 128; ++haylen) {
+    char *hay = map + pagesz - (haylen + 1);
+    for (int i = 0; i < haylen; ++i)
+      hay[i] = max(rand() & 255, 1);
+    hay[haylen] = 0;
+    for (int neelen = 1; neelen < haylen; ++neelen) {
+      char *nee = hay + (haylen + 1) - (neelen + 1);
+      ASSERT_EQ(memmem_naive(hay, haylen, nee, neelen),
+                memmem(hay, haylen, nee, neelen));
+    }
+  }
+  munmap(map, pagesz * 2);
+}
+
 /*
- *     memmem naive        l:    43,783c    14,142ns   m:    31,285c    10,105ns
- *     memmem              l:     2,597c       839ns   m:     2,612c       844ns
- *     memmem              l:       509c       164ns   m:       599c       193ns
+ *     memmem naive        l:    25,004c     8,335ns   m:    25,464c     8,488ns
+ *     memmem              l:       811c       270ns   m:       877c       292ns
+ *     memmem              l:       672c       224ns   m:       692c       231ns
  *
  *     strstr naive        l:   103,057c    33,287ns   m:    47,035c    15,192ns
  *     strstr              l:     3,186c     1,029ns   m:     3,218c     1,039ns
@@ -201,7 +229,12 @@ BENCH(memmem, bench) {
   EZBENCH2("memmem", donothing,
            __expropriate(memmem(kHyperion, kHyperionSize, "THE END", 7)));
   EZBENCH2("memmem", donothing,
-           __expropriate(memmem(
-               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
-               62, "aaaaaab", 7)));
+           __expropriate(
+               memmem("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+                      152,
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaab",
+                      81)));
 }

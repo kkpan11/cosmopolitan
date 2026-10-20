@@ -20,7 +20,7 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/syslib.internal.h"
 #include "libc/sock/sock.h"
@@ -36,10 +36,7 @@
 #include "libc/testlib/testlib.h"
 #include "libc/thread/thread.h"
 
-TEST(O_NONBLOCK, canBeSetBySocket_toMakeListenNonBlocking) {
-  // TODO(jart): this doesn't make any sense on windows
-  if (IsWindows())
-    return;
+TEST(O_NONBLOCK_, canBeSetBySocket_toMakeListenNonBlocking) {
   char buf[16] = {0};
   uint32_t addrsize = sizeof(struct sockaddr_in);
   struct sockaddr_in addr = {
@@ -84,7 +81,7 @@ TEST(O_NONBLOCK, canBeSetBySocket_toMakeListenNonBlocking) {
   munmap(phaser, 4096);
 }
 
-TEST(O_NONBLOCK, canBeTunedWithFcntl_toMakeReadNonBlocking) {
+TEST(O_NONBLOCK_, canBeTunedWithFcntl_toMakeReadNonBlocking) {
   char buf[16] = {0};
   uint32_t addrsize = sizeof(struct sockaddr_in);
   struct sockaddr_in addr = {

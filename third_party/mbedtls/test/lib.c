@@ -22,8 +22,8 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/describebacktrace.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/check.h"
@@ -49,6 +49,7 @@
 #include "third_party/mbedtls/endian.h"
 #include "third_party/mbedtls/error.h"
 #include "libc/serialize.h"
+#include "libc/cosmotime.h"
 #include "third_party/mbedtls/platform.h"
 __static_yoink("mbedtls_notice");
 

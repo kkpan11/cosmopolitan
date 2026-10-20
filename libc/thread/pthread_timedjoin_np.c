@@ -20,16 +20,18 @@
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timespec.internal.h"
+#include "libc/cosmo.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/dll.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread2.h"
 #include "libc/thread/tls.h"
-#include "third_party/nsync/futex.internal.h"
 
 static const char *DescribeReturnValue(char buf[30], int err, void **value) {
   char *p = buf;
@@ -55,29 +57,40 @@ static const char *DescribeReturnValue(char buf[30], int err, void **value) {
  *
  * @return 0 on success, or errno on error
  * @raise ECANCELED if calling thread was cancelled in masked mode
+ * @raise EDEADLK if `ctid` refers calling thread's own ctid futex
  * @raise EBUSY if `abstime` was specified and deadline expired
  * @cancelationpoint
  */
 static errno_t _pthread_wait(atomic_int *ctid, struct timespec *abstime) {
-  int x, e, rc = 0;
-  unassert(ctid != &__get_tls()->tib_tid);
+
+  // "If an implementation detects that the value specified by the
+  //  thread argument to pthread_join() refers to the calling thread,
+  //  it is recommended that the function should fail and report an
+  //  [EDEADLK] error." ──Quoth POSIX.1-2017
+  if (ctid == &__get_tls()->tib_ctid)
+    return EDEADLK;
+
   // "If the thread calling pthread_join() is canceled, then the target
   //  thread shall not be detached."  ──Quoth POSIX.1-2017
-  if (!(rc = pthread_testcancel_np())) {
-    BEGIN_CANCELATION_POINT;
-    while ((x = atomic_load_explicit(ctid, memory_order_acquire))) {
-      e = nsync_futex_wait_(ctid, x, !IsWindows() && !IsXnu(), abstime);
-      if (e == -ECANCELED) {
-        rc = ECANCELED;
-        break;
-      } else if (e == -ETIMEDOUT) {
-        rc = EBUSY;
-        break;
-      }
+  errno_t err;
+  if ((err = pthread_testcancel_np()))
+    return err;
+
+  BEGIN_CANCELATION_POINT;
+  int x;
+  while ((x = atomic_load_explicit(ctid, memory_order_acquire))) {
+    int e = cosmo_futex_wait(ctid, x, !IsWindows() && !IsXnu(), CLOCK_REALTIME,
+                             abstime);
+    if (e == -ECANCELED) {
+      err = ECANCELED;
+      break;
+    } else if (e == -ETIMEDOUT) {
+      err = EBUSY;
+      break;
     }
-    END_CANCELATION_POINT;
   }
-  return rc;
+  END_CANCELATION_POINT;
+  return err;
 }
 
 /**
@@ -97,31 +110,49 @@ static errno_t _pthread_wait(atomic_int *ctid, struct timespec *abstime) {
  *     when we'll stop waiting; if this is null we will wait forever
  * @return 0 on success, or errno on error
  * @raise ECANCELED if calling thread was cancelled in masked mode
+ * @raise EDEADLK if `thread` refers to calling thread
  * @raise EBUSY if `abstime` deadline elapsed
  * @cancelationpoint
  * @returnserrno
  */
 errno_t pthread_timedjoin_np(pthread_t thread, void **value_ptr,
                              struct timespec *abstime) {
+  int tid;
   errno_t err;
   struct PosixThread *pt;
   enum PosixThreadStatus status;
   pt = (struct PosixThread *)thread;
-  status = atomic_load_explicit(&pt->pt_status, memory_order_acquire);
+  unassert(thread);
+
   // "The behavior is undefined if the value specified by the thread
   //  argument to pthread_join() does not refer to a joinable thread."
   //                                  ──Quoth POSIX.1-2017
+  unassert((tid = _pthread_tid(pt)));
+  status = atomic_load_explicit(&pt->pt_status, memory_order_acquire);
   unassert(status == kPosixThreadJoinable || status == kPosixThreadTerminated);
-  if (!(err = _pthread_wait(&pt->tib->tib_tid, abstime))) {
-    _pthread_lock();
-    dll_remove(&_pthread_list, &pt->list);
-    _pthread_unlock();
-    if (value_ptr) {
-      *value_ptr = pt->pt_rc;
+
+  // "The results of multiple simultaneous calls to pthread_join()
+  //  specifying the same target thread are undefined."
+  //                                  ──Quoth POSIX.1-2017
+  if (!(err = _pthread_wait(&pt->tib->tib_ctid, abstime))) {
+    if (value_ptr)
+      *value_ptr = pt->pt_val;
+    if (atomic_load_explicit(&pt->pt_refs, memory_order_acquire)) {
+      _pthread_lock();
+      dll_remove(&_pthread_list, &pt->list);
+      dll_make_last(&_pthread_list, &pt->list);
+      atomic_store_explicit(&pt->pt_status, kPosixThreadZombie,
+                            memory_order_release);
+      _pthread_unlock();
+    } else {
+      _pthread_lock();
+      dll_remove(&_pthread_list, &pt->list);
+      _pthread_unlock();
+      _pthread_free(pt);
     }
-    _pthread_unref(pt);
   }
-  STRACE("pthread_timedjoin_np(%d, %s, %s) → %s", _pthread_tid(pt),
+
+  STRACE("pthread_timedjoin_np(%d, %s, %s) → %s", tid,
          DescribeReturnValue(alloca(30), err, value_ptr),
          DescribeTimespec(err ? -1 : 0, abstime), DescribeErrno(err));
   return err;

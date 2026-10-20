@@ -53,19 +53,12 @@
 #     OVERRIDE_FOO set ~/.cosmo.mk and target-specific (use rarely)
 #
 
-ifeq ($(LANDLOCKMAKE_VERSION),)
 TMPSAFE = $(join $(TMPDIR)/,$(subst /,_,$@)).tmp
-else
-TMPSAFE = $(TMPDIR)/
-endif
 
 BACKTRACES =								\
 	-fno-schedule-insns2						\
 	-fno-optimize-sibling-calls					\
 	-mno-omit-leaf-frame-pointer
-
-SANITIZER =								\
-	-fsanitize=address
 
 NO_MAGIC =								\
 	-ffreestanding							\
@@ -95,11 +88,9 @@ DEFAULT_COPTS ?=							\
 	-fno-gnu-unique							\
 	-fstrict-aliasing						\
 	-fstrict-overflow						\
-	-fno-semantic-interposition					\
-	-fno-dwarf2-cfi-asm						\
-	-fno-unwind-tables						\
-	-fno-asynchronous-unwind-tables
+	-fno-semantic-interposition
 
+ifneq ($(TLSCC),)
 ifeq ($(ARCH), x86_64)
 # Microsoft says "[a]ny memory below the stack beyond the red zone
 # [note: Windows defines the x64 red zone size as 0] is considered
@@ -108,6 +99,7 @@ ifeq ($(ARCH), x86_64)
 DEFAULT_COPTS +=							\
 	-mno-red-zone							\
 	-mno-tls-direct-seg-refs
+endif
 endif
 
 ifeq ($(ARCH), aarch64)
@@ -118,14 +110,10 @@ ifeq ($(ARCH), aarch64)
 # - Cosmopolitan Libc uses x28 for thread-local storage because Apple
 #   forbids us from using tpidr_el0 too.
 #
-# - Cosmopolitan currently lacks an implementation of the runtime
-#   libraries needed by the -moutline-atomics flag
-#
 DEFAULT_COPTS +=							\
 	-ffixed-x18							\
 	-ffixed-x28							\
-	-fsigned-char							\
-	-mno-outline-atomics
+	-fsigned-char
 endif
 
 MATHEMATICAL =								\
@@ -142,12 +130,10 @@ DEFAULT_CPPFLAGS +=							\
 	-isystem libc/isystem
 
 DEFAULT_CFLAGS =							\
-	-std=gnu2x
+	-std=gnu23
 
 DEFAULT_CXXFLAGS =							\
-	-std=gnu++20							\
-	-fno-rtti							\
-	-fno-exceptions							\
+	-std=gnu++23							\
 	-fuse-cxa-atexit						\
 	-Wno-int-in-bool-context					\
 	-Wno-narrowing							\

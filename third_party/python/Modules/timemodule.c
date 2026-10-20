@@ -1033,33 +1033,9 @@ _PyTime_GetProcessTimeWithInfo(_PyTime_t *tp, _Py_clock_info_t *info)
     struct rusage ru;
     const char *function;
     struct timespec ts, res;
-    struct NtFileTime creation_time, exit_time, kernel_time, user_time;
-    if (IsWindows()) {
-        if (!GetProcessTimes(GetCurrentProcess(),
-                             &creation_time,
-                             &exit_time,
-                             &kernel_time,
-                             &user_time)) {
-            PyErr_SetFromWindowsErr(0);
-            return -1;
-        }
-        if (info) {
-            info->implementation = "GetProcessTimes()";
-            info->resolution = 1e-7;
-            info->monotonic = 1;
-            info->adjustable = 0;
-        }
-        *tp = (ReadFileTime(kernel_time) + ReadFileTime(user_time)) * 100;
-        return 0;
-    }
-    if (CLOCK_PROF != -1 || CLOCK_PROCESS_CPUTIME_ID != -1) {
-        if (CLOCK_PROF != -1) {
-            clk_id = CLOCK_PROF;
-            function = "clock_gettime(CLOCK_PROF)";
-        } else {
-            clk_id = CLOCK_PROCESS_CPUTIME_ID;
-            function = "clock_gettime(CLOCK_PROCESS_CPUTIME_ID)";
-        }
+    if (CLOCK_PROCESS_CPUTIME_ID != -1) {
+        clk_id = CLOCK_PROCESS_CPUTIME_ID;
+        function = "clock_gettime(CLOCK_PROCESS_CPUTIME_ID)";
         if (!clock_gettime(clk_id, &ts)) {
             if (info) {
                 info->implementation = function;

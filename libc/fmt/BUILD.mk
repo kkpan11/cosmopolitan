@@ -40,7 +40,7 @@ LIBC_FMT_A_DIRECTDEPS =				\
 	LIBC_STR				\
 	LIBC_SYSV				\
 	LIBC_TINYMATH				\
-	THIRD_PARTY_COMPILER_RT
+	THIRD_PARTY_COMPILER_RT			\
 
 LIBC_FMT_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(LIBC_FMT_A_DIRECTDEPS),$($(x))))
@@ -55,8 +55,7 @@ $(LIBC_FMT_A).pkg:				\
 
 $(LIBC_FMT_A_OBJS): private			\
 		CFLAGS +=			\
-			-fno-jump-tables	\
-			-fno-sanitize=address
+			-fno-jump-tables
 
 o/$(MODE)/libc/fmt/formatint64.o		\
 o/$(MODE)/libc/fmt/formatint64thousands.o	\
@@ -76,6 +75,10 @@ o/$(MODE)/libc/fmt/wcstoimax.o			\
 o/$(MODE)/libc/fmt/wcstoumax.o: private		\
 		CFLAGS +=			\
 			-Os
+
+o/$(MODE)/libc/fmt/zleb64.o: private		\
+		CFLAGS +=			\
+			-foptimize-sibling-calls
 
 LIBC_FMT_LIBS = $(foreach x,$(LIBC_FMT_ARTIFACTS),$($(x)))
 LIBC_FMT_SRCS = $(foreach x,$(LIBC_FMT_ARTIFACTS),$($(x)_SRCS))

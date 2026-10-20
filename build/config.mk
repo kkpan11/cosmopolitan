@@ -14,7 +14,6 @@ ENABLE_FTRACE = 1
 CONFIG_OFLAGS ?= -g -ggdb
 CONFIG_CCFLAGS += -O2 $(BACKTRACES)
 CONFIG_CPPFLAGS += -DSYSDEBUG
-TARGET_ARCH ?= -msse3
 endif
 ifeq ($(MODE), x86_64)
 ENABLE_FTRACE = 1
@@ -64,7 +63,6 @@ ENABLE_FTRACE = 1
 CONFIG_CCFLAGS += $(BACKTRACES) -O
 CONFIG_CPPFLAGS += -DSYSDEBUG -DDWARFLESS
 CONFIG_LDFLAGS += -S
-TARGET_ARCH ?= -msse3
 endif
 
 # Optimized Mode
@@ -84,7 +82,7 @@ ENABLE_FTRACE = 1
 CONFIG_OFLAGS ?= -g -ggdb
 CONFIG_CPPFLAGS += -DNDEBUG -DSYSDEBUG
 CONFIG_CCFLAGS += $(BACKTRACES) -O3 -fmerge-all-constants
-TARGET_ARCH ?= -march=native
+CONFIG_TARGET_ARCH ?= -march=native
 endif
 
 # Optimized Linux Mode
@@ -98,11 +96,22 @@ endif
 #   - Turns off support for other operating systems
 #
 ifeq ($(MODE), optlinux)
+TLSCC =
 CONFIG_OFLAGS ?= -g -ggdb
 CONFIG_CPPFLAGS += -DNDEBUG -DSYSDEBUG -DSUPPORT_VECTOR=1
 CONFIG_CCFLAGS += -O3 -fmerge-all-constants
 CONFIG_COPTS += -mred-zone
-TARGET_ARCH ?= -march=native
+CONFIG_TARGET_ARCH ?= -mavx
+endif
+ifeq ($(MODE), x86_64-optlinux)
+TLSCC =
+CONFIG_CPPFLAGS += -DNDEBUG -DSYSDEBUG -DSUPPORT_VECTOR=1
+CONFIG_CCFLAGS += -O3 -fmerge-all-constants
+CONFIG_TARGET_ARCH ?= -mavx
+endif
+ifeq ($(MODE), aarch64-optlinux)
+CONFIG_CPPFLAGS += -DNDEBUG -DSYSDEBUG -DSUPPORT_VECTOR=1
+CONFIG_CCFLAGS += -O3 -fmerge-all-constants
 endif
 
 # Release Mode
@@ -123,36 +132,13 @@ endif
 ifeq ($(MODE), rel)
 CONFIG_CPPFLAGS += -DNDEBUG -DDWARFLESS
 CONFIG_CCFLAGS += $(BACKTRACES) -O2
-TARGET_ARCH ?= -msse3
 PYFLAGS += -O1
-endif
-
-# Asan Mode
-#
-# Safer binaries good for backend production serving.
-#
-#   - `make MODE=asan`
-#   - Memory safety
-#   - Production worthy
-#   - Backtraces
-#   - Debuggability
-#   - Larger binaries
-#
-ifeq ($(MODE), asan)
-ENABLE_FTRACE = 1
-CONFIG_OFLAGS ?= -g -ggdb
-CONFIG_CPPFLAGS += -D__SANITIZE_ADDRESS__
-CONFIG_CCFLAGS += $(BACKTRACES) -O2 -DSYSDEBUG
-CONFIG_COPTS += -fsanitize=address
-TARGET_ARCH ?= -msse3
-QUOTA ?= -C64 -L300
 endif
 
 # Debug Mode
 #
 #   - `make MODE=dbg`
 #   - Backtraces
-#   - Enables asan
 #   - Enables ubsan
 #   - Stack canaries
 #   - No optimization
@@ -161,19 +147,33 @@ endif
 ifeq ($(MODE), dbg)
 ENABLE_FTRACE = 1
 CONFIG_OFLAGS ?= -g -ggdb
-CONFIG_CPPFLAGS += -DMODE_DBG -D__SANITIZE_ADDRESS__ -D__SANITIZE_UNDEFINED__
-CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG -O0 -fno-inline
-CONFIG_COPTS += -fsanitize=address -fsanitize=undefined
-TARGET_ARCH ?= -msse3
+OVERRIDE_CFLAGS += -O0
+OVERRIDE_CXXFLAGS += -O0
+CONFIG_CPPFLAGS += -DMODE_DBG -D__SANITIZE_UNDEFINED__ -Wno-unused-variable -Wno-unused-but-set-variable
+CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG
+CONFIG_COPTS += -fsanitize=undefined -fno-data-sections
+OVERRIDE_CCFLAGS += -fno-pie
+QUOTA ?= -C64 -L300
+endif
+ifeq ($(MODE), x86_64-dbg)
+ENABLE_FTRACE = 1
+CONFIG_OFLAGS ?= -g -ggdb
+OVERRIDE_CFLAGS += -O0
+OVERRIDE_CXXFLAGS += -O0
+CONFIG_CPPFLAGS += -DMODE_DBG -D__SANITIZE_UNDEFINED__ -Wno-unused-variable -Wno-unused-but-set-variable
+CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG
+CONFIG_COPTS += -fsanitize=undefined -fno-data-sections
 OVERRIDE_CCFLAGS += -fno-pie
 QUOTA ?= -C64 -L300
 endif
 ifeq ($(MODE), aarch64-dbg)
 ENABLE_FTRACE = 1
 CONFIG_OFLAGS ?= -g -ggdb
-CONFIG_CPPFLAGS += -DMODE_DBG -D__SANITIZE_UNDEFINED__
-CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG -O0 -fno-inline -fdce
-CONFIG_COPTS += -fsanitize=undefined
+OVERRIDE_CFLAGS += -O0 -fdce
+OVERRIDE_CXXFLAGS += -O0 -fdce
+CONFIG_CPPFLAGS += -DMODE_DBG -D__SANITIZE_UNDEFINED__ -Wno-unused-variable -Wno-unused-but-set-variable
+CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG
+CONFIG_COPTS += -fsanitize=undefined -fno-data-sections
 QUOTA ?= -C64 -L300
 endif
 
@@ -189,10 +189,18 @@ endif
 #
 ifeq ($(MODE), sysv)
 ENABLE_FTRACE = 1
-CONFIG_OFLAGS ?= -g -ggdb
 CONFIG_CCFLAGS += $(BACKTRACES) -O2
 CONFIG_CPPFLAGS += -DSYSDEBUG -DSUPPORT_VECTOR=121
-TARGET_ARCH ?= -msse3
+endif
+ifeq ($(MODE), x86_64-sysv)
+ENABLE_FTRACE = 1
+CONFIG_CCFLAGS += $(BACKTRACES) -O2
+CONFIG_CPPFLAGS += -DSYSDEBUG -DSUPPORT_VECTOR=121
+endif
+ifeq ($(MODE), aarch64-sysv)
+ENABLE_FTRACE = 1
+CONFIG_CCFLAGS += $(BACKTRACES) -O2
+CONFIG_CPPFLAGS += -DSYSDEBUG -DSUPPORT_VECTOR=121
 endif
 
 # Tiny Mode
@@ -210,8 +218,7 @@ endif
 ifeq ($(MODE), tiny)
 CONFIG_CPPFLAGS +=			\
 	-DTINY				\
-	-DNDEBUG			\
-	-DTRUSTWORTHY
+	-DNDEBUG
 CONFIG_CCFLAGS +=			\
 	-Os				\
 	-fno-align-functions		\
@@ -222,8 +229,6 @@ CONFIG_CCFLAGS +=			\
 	-momit-leaf-frame-pointer	\
 	-foptimize-sibling-calls	\
 	-DDWARFLESS
-TARGET_ARCH ?=				\
-	-msse3
 PYFLAGS +=				\
 	-O2				\
 	-B
@@ -231,8 +236,7 @@ endif
 ifeq ($(MODE), x86_64-tiny)
 CONFIG_CPPFLAGS +=			\
 	-DTINY				\
-	-DNDEBUG			\
-	-DTRUSTWORTHY
+	-DNDEBUG
 CONFIG_CCFLAGS +=			\
 	-Os				\
 	-fno-align-functions		\
@@ -243,8 +247,6 @@ CONFIG_CCFLAGS +=			\
 	-momit-leaf-frame-pointer	\
 	-foptimize-sibling-calls	\
 	-DDWARFLESS
-TARGET_ARCH ?=				\
-	-msse3
 PYFLAGS +=				\
 	-O2				\
 	-B
@@ -253,8 +255,7 @@ ifeq ($(MODE), aarch64-tiny)
 # TODO(jart): -mcmodel=tiny
 CONFIG_CPPFLAGS +=			\
 	-DTINY				\
-	-DNDEBUG			\
-	-DTRUSTWORTHY
+	-DNDEBUG
 CONFIG_CCFLAGS +=			\
 	-Os				\
 	-fno-align-functions		\
@@ -284,10 +285,10 @@ endif
 #   - YOLO
 #
 ifeq ($(MODE), tinylinux)
+TLSCC =
 CONFIG_CPPFLAGS +=			\
 	-DTINY				\
 	-DNDEBUG			\
-	-DTRUSTWORTHY			\
 	-DSUPPORT_VECTOR=1		\
 	-DDWARFLESS
 CONFIG_CCFLAGS +=			\
@@ -296,8 +297,33 @@ CONFIG_CCFLAGS +=			\
 	-fno-align-jumps		\
 	-fno-align-labels		\
 	-fno-align-loops
-TARGET_ARCH ?=				\
-	-msse3
+endif
+ifeq ($(MODE), x86_64-tinylinux)
+TLSCC =
+CONFIG_CPPFLAGS +=			\
+	-DTINY				\
+	-DNDEBUG			\
+	-DSUPPORT_VECTOR=1		\
+	-DDWARFLESS
+CONFIG_CCFLAGS +=			\
+	-Os				\
+	-fno-align-functions		\
+	-fno-align-jumps		\
+	-fno-align-labels		\
+	-fno-align-loops
+endif
+ifeq ($(MODE), aarch64-tinylinux)
+CONFIG_CPPFLAGS +=			\
+	-DTINY				\
+	-DNDEBUG			\
+	-DSUPPORT_VECTOR=1		\
+	-DDWARFLESS
+CONFIG_CCFLAGS +=			\
+	-Os				\
+	-fno-align-functions		\
+	-fno-align-jumps		\
+	-fno-align-labels		\
+	-fno-align-loops
 endif
 
 # Linux+BSD Tiny Mode
@@ -315,10 +341,10 @@ endif
 #   - YOLO
 #
 ifeq ($(MODE), tinylinuxbsd)
+TLSCC =
 CONFIG_CPPFLAGS +=		\
 	-DTINY			\
 	-DNDEBUG		\
-	-DTRUSTWORTHY		\
 	-DSUPPORT_VECTOR=113	\
 	-DDWARFLESS
 CONFIG_CCFLAGS +=		\
@@ -327,8 +353,6 @@ CONFIG_CCFLAGS +=		\
 	-fno-align-jumps	\
 	-fno-align-labels	\
 	-fno-align-loops
-TARGET_ARCH ?=			\
-	-msse3
 endif
 
 # Unix Tiny Mode
@@ -348,7 +372,6 @@ ifeq ($(MODE), tinysysv)
 CONFIG_CPPFLAGS +=		\
 	-DTINY			\
 	-DNDEBUG		\
-	-DTRUSTWORTHY		\
 	-DSUPPORT_VECTOR=121	\
 	-DDWARFLESS
 CONFIG_CCFLAGS +=		\
@@ -357,8 +380,6 @@ CONFIG_CCFLAGS +=		\
 	-fno-align-jumps	\
 	-fno-align-labels	\
 	-fno-align-loops
-TARGET_ARCH ?=			\
-	-msse3
 endif
 
 # Tiny Metallic Unix Mode
@@ -378,7 +399,6 @@ ifeq ($(MODE), tinynowin)
 CONFIG_CPPFLAGS +=		\
 	-DTINY			\
 	-DNDEBUG		\
-	-DTRUSTWORTHY		\
 	-DSUPPORT_VECTOR=251	\
 	-DDWARFLESS
 CONFIG_CCFLAGS +=		\
@@ -387,8 +407,6 @@ CONFIG_CCFLAGS +=		\
 	-fno-align-jumps	\
 	-fno-align-labels	\
 	-fno-align-loops
-TARGET_ARCH ?=			\
-	-msse3
 endif
 
 # no x87 instructions mode
@@ -410,7 +428,6 @@ ENABLE_FTRACE = 1
 CONFIG_COPTS += -mlong-double-64
 CONFIG_CCFLAGS += $(BACKTRACES) -O2
 CONFIG_CPPFLAGS += -DSYSDEBUG -DNOX87
-TARGET_ARCH ?= -msse3
 endif
 
 # LLVM Mode
@@ -422,8 +439,7 @@ endif
 # The rest of the monorepo may not work with llvm.
 #
 ifeq ($(MODE), llvm)
-.STRICT = 0
-TARGET_ARCH ?= -msse3
+.SANDBOXED = 0
 CONFIG_CCFLAGS += $(BACKTRACES) -DSYSDEBUG -O2
 AS = clang
 CC = clang
@@ -463,10 +479,9 @@ endif
 # like objconv to convert them to COFF or MachO. Then use ANSI mode to
 # rollup one header file that'll enable linkage with minimal issues.
 ifeq ($(MODE), ansi)
-CONFIG_CFLAGS += -std=c11
+CONFIG_CFLAGS += -std=c23
 #CONFIG_CPPFLAGS += -ansi
-CONFIG_CXXFLAGS += -std=c++11
-TARGET_ARCH ?= -msse3
+CONFIG_CXXFLAGS += -std=c++23
 endif
 
 ifneq ($(ENABLE_FTRACE),)
@@ -504,7 +519,7 @@ endif
 ifeq ($(ARCH), aarch64)
 # this flag causes gcc to generate functions like this
 #
-#       nop nop nop nop nop nop
+#       nop nop nop nop nop nop nop nop
 #     func:
 #       nop
 #       ...
@@ -521,6 +536,10 @@ ifeq ($(ARCH), aarch64)
 #       b   -5
 #       ...
 #
-CONFIG_CCFLAGS += -fpatchable-function-entry=7,6
+# we only need -fpatchable-function-entry=7,6 but we round up to 32
+# bytes so we don't break function alignment.
+CONFIG_CCFLAGS += -fpatchable-function-entry=9,8
 endif
 endif
+
+TARGET_ARCH ?= $(CONFIG_TARGET_ARCH)

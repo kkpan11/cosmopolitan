@@ -26,11 +26,11 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/directmap.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/irq/acpi.internal.h"
 #include "libc/log/color.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nt/efi.h"
 #include "libc/runtime/pc.internal.h"
 #include "libc/serialize.h"
@@ -58,9 +58,8 @@ textstartup void *_AcpiOsMapUncachedMemory(uintptr_t phy, size_t n) {
 }
 
 textstartup static void *_AcpiOsAllocatePages(size_t n) {
-  struct DirectMap dm = sys_mmap_metal(NULL, n, PROT_READ | PROT_WRITE,
-                                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  void *addr = dm.addr;
+  void *addr = sys_mmap_metal(NULL, n, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (addr == (void *)-1)
     addr = NULL;
   return addr;

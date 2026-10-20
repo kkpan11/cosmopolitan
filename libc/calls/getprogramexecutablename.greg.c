@@ -20,14 +20,16 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/metalfile.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/cosmo.h"
+#include "libc/ctype.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/libgen.h"
-#include "libc/intrin/getenv.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/getenv.h"
+#include "libc/intrin/strace.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nt/runtime.h"
 #include "libc/runtime/runtime.h"
 #include "libc/serialize.h"
@@ -41,6 +43,7 @@ __static_yoink("_init_program_executable_name");
 
 #define CTL_KERN                   1
 #define KERN_PROC                  14
+#define KERN_PROC_ARGS             48
 #define KERN_PROC_PATHNAME_FREEBSD 12
 #define KERN_PROC_PATHNAME_NETBSD  5
 
@@ -58,10 +61,6 @@ static struct {
     char16_t buf16[PATH_MAX / 2];
   } u;
 } g_prog;
-
-static inline int IsAlpha(int c) {
-  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
-}
 
 static inline int AllNumDot(const char *s) {
   while (true) {
@@ -96,9 +95,8 @@ static int OldApeLoader(char *s) {
 static int CopyWithCwd(const char *q, char *p, char *e) {
   char c;
   if (*q != '/') {
-    if (q[0] == '.' && q[1] == '/') {
+    if (q[0] == '.' && q[1] == '/')
       q += 2;
-    }
     int got = __getcwd(p, e - p - 1 /* '/' */);
     if (got != -1) {
       p += got - 1;
@@ -118,9 +116,10 @@ static int CopyWithCwd(const char *q, char *p, char *e) {
 
 // if q exists then turn it into an absolute path.
 static int TryPath(const char *q) {
-  if (!CopyWithCwd(q, g_prog.u.buf, g_prog.u.buf + sizeof(g_prog.u.buf))) {
+  if (!q)
     return 0;
-  }
+  if (!CopyWithCwd(q, g_prog.u.buf, g_prog.u.buf + sizeof(g_prog.u.buf)))
+    return 0;
   return !sys_faccessat(AT_FDCWD, g_prog.u.buf, F_OK, 0);
 }
 
@@ -129,9 +128,8 @@ static int TryPath(const char *q) {
 void __init_program_executable_name(void) {
   if (__program_executable_name && *__program_executable_name != '/' &&
       CopyWithCwd(__program_executable_name, g_prog.u.buf,
-                  g_prog.u.buf + sizeof(g_prog.u.buf))) {
+                  g_prog.u.buf + sizeof(g_prog.u.buf)))
     __program_executable_name = g_prog.u.buf;
-  }
 }
 
 static inline void InitProgramExecutableNameImpl(void) {
@@ -139,25 +137,12 @@ static inline void InitProgramExecutableNameImpl(void) {
   ssize_t got;
   char c, *q, *b;
 
-  if (IsWindows()) {
-    int n = GetModuleFileName(0, g_prog.u.buf16, ARRAYLEN(g_prog.u.buf16));
-    for (int i = 0; i < n; ++i) {
-      // turn c:\foo\bar into c:/foo/bar
-      if (g_prog.u.buf16[i] == '\\') {
-        g_prog.u.buf16[i] = '/';
-      }
-    }
-    if (IsAlpha(g_prog.u.buf16[0]) &&  //
-        g_prog.u.buf16[1] == ':' &&    //
-        g_prog.u.buf16[2] == '/') {
-      // turn c:/... into /c/...
-      g_prog.u.buf16[1] = g_prog.u.buf16[0];
-      g_prog.u.buf16[0] = '/';
-      g_prog.u.buf16[2] = '/';
-    }
-    tprecode16to8(g_prog.u.buf, sizeof(g_prog.u.buf), g_prog.u.buf16);
-    goto UseBuf;
-  }
+  if (IsWindows())
+    if ((n = GetModuleFileName(0, g_prog.u.buf16, ARRAYLEN(g_prog.u.buf16))))
+      if (n < ARRAYLEN(g_prog.u.buf16))
+        if (__mkunixpath(g_prog.u.buf16, g_prog.u.buf) != -1)
+          goto UseBuf;
+
   if (IsMetal()) {
     __program_executable_name = APE_COM_NAME;
     return;
@@ -166,11 +151,12 @@ static inline void InitProgramExecutableNameImpl(void) {
   // see if the loader passed us a path.
   if (__program_executable_name) {
     if (issetugid()) {
-      /* we are running as a set-id interpreter script. this is highly unusual.
-         it means either someone installed their ape loader set-id, or they are
-         running a system that supports secure set-id interpreter scripts via a
-         /dev/fd/ path. check for the latter and allow that. otherwise, use the
-         empty string to obviate the TOCTOU problem between loader and binary.
+      /* we are running as a set-id interpreter script. this is highly
+         unusual. it means either someone installed their ape loader set-id,
+         or they are running a system that supports secure set-id
+         interpreter scripts via a /dev/fd/ path. check for the latter and
+         allow that. otherwise, use the empty string to obviate the TOCTOU
+         problem between loader and binary.
        */
       if (!(b = DevFd()) ||
           0 != strncmp(b, __program_executable_name, (n = StrlenDevFd())) ||
@@ -188,13 +174,15 @@ static inline void InitProgramExecutableNameImpl(void) {
   if (IsFreebsd() || IsNetbsd()) {
     int cmd[4];
     cmd[0] = CTL_KERN;
-    cmd[1] = KERN_PROC;
     if (IsFreebsd()) {
+      cmd[1] = KERN_PROC;
       cmd[2] = KERN_PROC_PATHNAME_FREEBSD;
+      cmd[3] = -1;  // current process
     } else {
-      cmd[2] = KERN_PROC_PATHNAME_NETBSD;
+      cmd[1] = KERN_PROC_ARGS;
+      cmd[2] = -1;  // current process
+      cmd[3] = KERN_PROC_PATHNAME_NETBSD;
     }
-    cmd[3] = -1;  // current process
     if (sysctl(cmd, ARRAYLEN(cmd), b, &n, 0, 0) != -1) {
       if (!OldApeLoader(b)) {
         goto UseBuf;
@@ -212,14 +200,12 @@ static inline void InitProgramExecutableNameImpl(void) {
   }
 
   // don't trust argv or envp if set-id.
-  if (issetugid()) {
+  if (issetugid())
     goto UseEmpty;
-  }
 
   // try argv[0], then then $_.
-  if (TryPath(__argv[0]) || TryPath(__getenv(__envp, "_").s)) {
+  if (TryPath(__argv[0]) || TryPath(__getenv(__envp, "_").s))
     goto UseBuf;
-  }
 
   // give up and just copy argv[0] into it
   if ((q = __argv[0])) {

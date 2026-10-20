@@ -19,9 +19,7 @@ TEST_LIBC_CALLS_BINS =							\
 	$(TEST_LIBC_CALLS_COMS)						\
 	$(TEST_LIBC_CALLS_COMS:%=%.dbg)					\
 	o/$(MODE)/test/libc/calls/life-nomod				\
-	o/$(MODE)/test/libc/calls/life-classic				\
-	o/$(MODE)/test/libc/calls/zipread.dbg				\
-	o/$(MODE)/test/libc/calls/zipread
+	o/$(MODE)/test/libc/calls/life-classic
 
 TEST_LIBC_CALLS_TESTS =							\
 	$(TEST_LIBC_CALLS_SRCS_TEST:%.c=o/$(MODE)/%.ok)
@@ -37,6 +35,7 @@ TEST_LIBC_CALLS_DIRECTDEPS =						\
 	LIBC_LOG							\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
+	LIBC_NT_BCRYPTPRIMITIVES					\
 	LIBC_NT_KERNEL32						\
 	LIBC_PROC							\
 	LIBC_RUNTIME							\
@@ -67,6 +66,17 @@ o/$(MODE)/test/libc/calls/%.dbg:					\
 		o/$(MODE)/test/libc/calls/calls.pkg			\
 		$(LIBC_TESTMAIN)					\
 		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/calls/getprogramexecutablename_test.dbg:					\
+		$(TEST_LIBC_CALLS_DEPS)						\
+		o/$(MODE)/test/libc/calls/getprogramexecutablename_test.o	\
+		o/$(MODE)/test/libc/calls/ape.elf.zip.o				\
+		o/$(MODE)/test/libc/calls/gpenchild.elf.zip.o			\
+		o/$(MODE)/test/libc/calls/calls.pkg				\
+		$(LIBC_TESTMAIN)						\
+		$(CRT)								\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
@@ -116,45 +126,74 @@ o/$(MODE)/test/libc/calls/life-nomod.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/test/libc/calls/gpenchild.dbg:			\
+		$(LIBC_RUNTIME)					\
+		o/$(MODE)/test/libc/calls/gpenchild.o		\
+		$(CRT)						\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/calls/gpenchild.elf:				\
+		o/$(MODE)/tool/build/assimilate		\
+		o/$(MODE)/test/libc/calls/gpenchild		\
+		o/$(MODE)/tool/build/cp
+	@$(COMPILE) -wACP -T$@					\
+		o/$(MODE)/tool/build/cp				\
+		o/$(MODE)/test/libc/calls/gpenchild		\
+		o/$(MODE)/test/libc/calls/gpenchild.elf
+	@$(COMPILE) -wAASSIMILATE -T$@				\
+		o/$(MODE)/tool/build/assimilate -bcef	\
+		o/$(MODE)/test/libc/calls/gpenchild.elf
+
+o/$(MODE)/test/libc/calls/ape.elf:			\
+		o/$(MODE)/tool/build/cp		\
+		o/$(MODE)/ape/ape.elf
+	@$(COMPILE) -wACP -T$@					\
+		o/$(MODE)/tool/build/cp				\
+		o/$(MODE)/ape/ape.elf			\
+		o/$(MODE)/test/libc/calls/ape.elf
+
+o/$(MODE)/test/libc/calls/ape.elf.zip.o					\
+o/$(MODE)/test/libc/calls/gpenchild.elf.zip.o				\
 o/$(MODE)/test/libc/calls/tiny64.elf.zip.o				\
 o/$(MODE)/test/libc/calls/life-nomod.zip.o				\
-o/$(MODE)/test/libc/calls/life-classic.zip.o				\
-o/$(MODE)/test/libc/calls/zipread.zip.o: private			\
+o/$(MODE)/test/libc/calls/life-classic.zip.o: private				\
 		ZIPOBJ_FLAGS +=						\
 			-B
 
-# TODO(jart): Have pledge() support SIOCGIFCONF
 o/$(MODE)/test/libc/calls/ioctl_test.runs:				\
-		private .PLEDGE =
+		private .SANDBOXED = 0
 
 o/$(MODE)/test/libc/calls/lseek_test.runs				\
+o/$(MODE)/test/libc/calls/poll_latency_test.runs			\
 o/$(MODE)/test/libc/calls/poll_test.runs:				\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
+		private .PLEDGE = inet
 
 o/$(MODE)/test/libc/calls/fcntl_test.runs				\
 o/$(MODE)/test/libc/calls/lock_test.runs				\
 o/$(MODE)/test/libc/calls/lock2_test.runs				\
 o/$(MODE)/test/libc/calls/lock_ofd_test.runs:				\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc flock
+		private .PLEDGE = flock
 
 o/$(MODE)/test/libc/calls/unveil_test.runs				\
 o/$(MODE)/test/libc/calls/openbsd_test.runs:				\
-		private .PLEDGE = stdio rpath wpath cpath fattr proc unveil
+		private .PLEDGE = unveil
 
-o/$(MODE)/test/libc/calls/fexecve_test.runs:				\
-		private .UNSANDBOXED = 1  # for memfd_create()
+o/$(MODE)/test/libc/calls/flocks_test.runs:				\
+		private .PLEDGE = flock
 
-o/$(MODE)/test/libc/calls/execve_test.runs:				\
-		private .UNSANDBOXED = 1  # for memfd_create()
+o/$(MODE)/test/libc/calls/setrlimit_test.runs:				\
+		private .PLEDGE = inet
+
+o/$(MODE)/test/libc/calls/specialfile_test.runs:			\
+		private .UNVEIL = r:/dev/random r:/dev/urandom
 
 o/$(MODE)/test/libc/calls/read_test.runs:				\
 		private .UNVEIL += /dev/zero
 
 # TODO(jart): Update nointernet() to allow AF_INET6
 o/$(MODE)/test/libc/calls/pledge_test.runs:				\
-		private .INTERNET = 1
-o/$(MODE)/test/libc/calls/pledge_test.runs:				\
-		private .PLEDGE =
+		private .SANDBOXED = 0
 
 .PHONY: o/$(MODE)/test/libc/calls
 o/$(MODE)/test/libc/calls:						\

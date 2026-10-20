@@ -16,21 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/intrin/iscall.internal.h"
+#include "libc/intrin/describebacktrace.h"
+#include "libc/intrin/iscall.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/weaken.h"
 #include "libc/nexgen32e/stackframe.h"
 
-#define N 160
+#define N 280
 
-static bool IsDangerous(const void *ptr) {
+#define ABI __privileged optimizesize
+
+ABI static bool IsDangerous(const void *ptr) {
   if (_weaken(kisdangerous))
     return _weaken(kisdangerous)(ptr);
   return false;
 }
 
-static char *FormatHex(char *p, unsigned long x) {
+ABI static char *FormatHex(char *p, unsigned long x) {
   int k = x ? (__builtin_clzl(x) ^ 63) + 1 : 1;
   k = (k + 3) & -4;
   while (k > 0)
@@ -39,8 +41,7 @@ static char *FormatHex(char *p, unsigned long x) {
   return p;
 }
 
-dontinstrument const char *(DescribeBacktrace)(char buf[N],
-                                               const struct StackFrame *fr) {
+ABI const char *_DescribeBacktrace(char buf[N], const struct StackFrame *fr) {
   char *p = buf;
   char *pe = p + N;
   bool gotsome = false;

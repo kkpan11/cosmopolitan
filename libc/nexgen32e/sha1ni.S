@@ -31,7 +31,7 @@
 │  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.        │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 .section .notice,"aR",@progbits
 .asciz "\n\n\
@@ -80,6 +80,7 @@ Tim Chen <tim.c.chen@linux.intel.com>"
 //	@see	X86_HAVE(SHA)
 	.ftrace1
 sha1_transform_ni:
+	beg
 	.ftrace2
 	push	%rbp
 	mov	%rsp,%rbp
@@ -275,6 +276,7 @@ sha1_transform_ni:
 .Ldone_hash:
 	leave
 	ret
+	end
 	.endfn	sha1_transform_ni,globl
 
 .section .rodata.cst16.PSHUFFLE_BYTE_FLIP_MASK, "aM", @progbits, 16

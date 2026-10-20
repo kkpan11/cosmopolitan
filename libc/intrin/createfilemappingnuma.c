@@ -18,8 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/memory.h"
 #include "libc/nt/struct/securityattributes.h"
 
@@ -45,7 +45,7 @@ textwindows int64_t CreateFileMappingNuma(
       dwMaximumSizeLow, opt_lpName, nndDesiredNumaNode);
   if (!hHandle)
     __winerr();
-  NTTRACE("CreateFileMappingNuma(%ld, %s, %s, %'zu, %#hs) → %ld% m", opt_hFile,
+  NTTRACE("CreateFileMappingNuma(%ld, %s, %s, %'zu, %#!hs) → %ld% m", opt_hFile,
           DescribeNtSecurityAttributes(opt_lpFileMappingAttributes),
           DescribeNtPageFlags(flProtect),
           (uint64_t)dwMaximumSizeHigh << 32 | dwMaximumSizeLow, opt_lpName,

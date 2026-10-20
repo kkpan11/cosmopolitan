@@ -20,7 +20,7 @@
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
@@ -132,6 +132,18 @@ TEST(dirstream, hasDirectoryEntry) {
 
 TEST(__zipos_normpath, emptyBuf_wontNulTerminate) {
   __zipos_normpath(0, "hello", 0);
+}
+
+TEST(__zipos_normpath, leadingSlash_isRemoved) {
+  char d[16];
+  ASSERT_EQ(5, __zipos_normpath(d, "/hello", 16));
+  ASSERT_STREQ("hello", d);
+}
+
+TEST(__zipos_normpath, trailingSlash_isNotRemoved) {
+  char d[16];
+  ASSERT_EQ(6, __zipos_normpath(d, "hello/", 16));
+  ASSERT_STREQ("hello/", d);
 }
 
 TEST(__zipos_normpath, overflows_willNulTerminate) {

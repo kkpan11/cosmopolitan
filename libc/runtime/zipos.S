@@ -16,14 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 //	static_yoink this symbol for open(/zip/...) support.
 	zipos = 0
 	.globl	zipos
 
 	.yoink	__zipos_close
-	.yoink	__zipos_fcntl
 	.yoink	__zipos_fstat
 	.yoink	__zipos_access
 	.yoink	__zipos_seek

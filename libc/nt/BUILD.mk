@@ -91,6 +91,48 @@ $(LIBC_NT_COMDLG32_A).pkg:				\
 
 #───────────────────────────────────────────────────────────────────────────────
 
+LIBC_NT_ARTIFACTS += LIBC_NT_SHELL32_A
+LIBC_NT_SHELL32 = $(LIBC_NT_SHELL32_A_DEPS) $(LIBC_NT_SHELL32_A)
+LIBC_NT_SHELL32_A = o/$(MODE)/libc/nt/shell32.a
+LIBC_NT_SHELL32_A_SRCS := $(wildcard libc/nt/shell32/*.S)
+LIBC_NT_SHELL32_A_OBJS = $(LIBC_NT_SHELL32_A_SRCS:%.S=o/$(MODE)/%.o)
+LIBC_NT_SHELL32_A_CHECKS = $(LIBC_NT_SHELL32_A).pkg
+LIBC_NT_SHELL32_A_DIRECTDEPS = LIBC_NT_KERNEL32
+LIBC_NT_SHELL32_A_DEPS :=					\
+	$(call uniq,$(foreach x,$(LIBC_NT_SHELL32_A_DIRECTDEPS),$($(x))))
+
+$(LIBC_NT_SHELL32_A):						\
+		libc/nt/shell32/				\
+		$(LIBC_NT_SHELL32_A).pkg			\
+		$(LIBC_NT_SHELL32_A_OBJS)
+
+$(LIBC_NT_SHELL32_A).pkg:					\
+		$(LIBC_NT_SHELL32_A_OBJS)			\
+		$(foreach x,$(LIBC_NT_SHELL32_A_DIRECTDEPS),$($(x)_A).pkg)
+
+#───────────────────────────────────────────────────────────────────────────────
+
+LIBC_NT_ARTIFACTS += LIBC_NT_OLE32_A
+LIBC_NT_OLE32 = $(LIBC_NT_OLE32_A_DEPS) $(LIBC_NT_OLE32_A)
+LIBC_NT_OLE32_A = o/$(MODE)/libc/nt/ole32.a
+LIBC_NT_OLE32_A_SRCS := $(wildcard libc/nt/ole32/*.S)
+LIBC_NT_OLE32_A_OBJS = $(LIBC_NT_OLE32_A_SRCS:%.S=o/$(MODE)/%.o)
+LIBC_NT_OLE32_A_CHECKS = $(LIBC_NT_OLE32_A).pkg
+LIBC_NT_OLE32_A_DIRECTDEPS = LIBC_NT_KERNEL32
+LIBC_NT_OLE32_A_DEPS :=			\
+	$(call uniq,$(foreach x,$(LIBC_NT_OLE32_A_DIRECTDEPS),$($(x))))
+
+$(LIBC_NT_OLE32_A):			\
+		libc/nt/ole32/		\
+		$(LIBC_NT_OLE32_A).pkg	\
+		$(LIBC_NT_OLE32_A_OBJS)
+
+$(LIBC_NT_OLE32_A).pkg:			\
+		$(LIBC_NT_OLE32_A_OBJS)	\
+		$(foreach x,$(LIBC_NT_OLE32_A_DIRECTDEPS),$($(x)_A).pkg)
+
+#───────────────────────────────────────────────────────────────────────────────
+
 LIBC_NT_ARTIFACTS += LIBC_NT_GDI32_A
 LIBC_NT_GDI32 = $(LIBC_NT_GDI32_A_DEPS) $(LIBC_NT_GDI32_A)
 LIBC_NT_GDI32_A = o/$(MODE)/libc/nt/gdi32.a
@@ -155,6 +197,48 @@ $(LIBC_NT_SYNCHRONIZATION_A):					\
 $(LIBC_NT_SYNCHRONIZATION_A).pkg:				\
 		$(LIBC_NT_SYNCHRONIZATION_A_OBJS)		\
 		$(foreach x,$(LIBC_NT_SYNCHRONIZATION_A_DIRECTDEPS),$($(x)_A).pkg)
+
+#───────────────────────────────────────────────────────────────────────────────
+
+LIBC_NT_ARTIFACTS += LIBC_NT_MEMORY_A
+LIBC_NT_MEMORY = $(LIBC_NT_MEMORY_A_DEPS) $(LIBC_NT_MEMORY_A)
+LIBC_NT_MEMORY_A = o/$(MODE)/libc/nt/memory.a
+LIBC_NT_MEMORY_A_SRCS := $(wildcard libc/nt/API-MS-Win-Core-Memory-l1-1-6/*.S)
+LIBC_NT_MEMORY_A_OBJS = $(LIBC_NT_MEMORY_A_SRCS:%.S=o/$(MODE)/%.o)
+LIBC_NT_MEMORY_A_CHECKS = $(LIBC_NT_MEMORY_A).pkg
+LIBC_NT_MEMORY_A_DIRECTDEPS = LIBC_NT_KERNEL32
+LIBC_NT_MEMORY_A_DEPS :=				\
+	$(call uniq,$(foreach x,$(LIBC_NT_MEMORY_A_DIRECTDEPS),$($(x))))
+
+$(LIBC_NT_MEMORY_A):					\
+		libc/nt/API-MS-Win-Core-Memory-l1-1-6/	\
+		$(LIBC_NT_MEMORY_A).pkg			\
+		$(LIBC_NT_MEMORY_A_OBJS)
+
+$(LIBC_NT_MEMORY_A).pkg:				\
+		$(LIBC_NT_MEMORY_A_OBJS)		\
+		$(foreach x,$(LIBC_NT_MEMORY_A_DIRECTDEPS),$($(x)_A).pkg)
+
+#───────────────────────────────────────────────────────────────────────────────
+
+LIBC_NT_ARTIFACTS += LIBC_NT_REALTIME_A
+LIBC_NT_REALTIME = $(LIBC_NT_REALTIME_A_DEPS) $(LIBC_NT_REALTIME_A)
+LIBC_NT_REALTIME_A = o/$(MODE)/libc/nt/realtime.a
+LIBC_NT_REALTIME_A_SRCS := $(wildcard libc/nt/API-MS-Win-Core-Realtime-l1-1-1/*.S)
+LIBC_NT_REALTIME_A_OBJS = $(LIBC_NT_REALTIME_A_SRCS:%.S=o/$(MODE)/%.o)
+LIBC_NT_REALTIME_A_CHECKS = $(LIBC_NT_REALTIME_A).pkg
+LIBC_NT_REALTIME_A_DIRECTDEPS = LIBC_NT_KERNEL32
+LIBC_NT_REALTIME_A_DEPS :=					\
+	$(call uniq,$(foreach x,$(LIBC_NT_REALTIME_A_DIRECTDEPS),$($(x))))
+
+$(LIBC_NT_REALTIME_A):						\
+		libc/nt/API-MS-Win-Core-Realtime-l1-1-1/	\
+		$(LIBC_NT_REALTIME_A).pkg			\
+		$(LIBC_NT_REALTIME_A_OBJS)
+
+$(LIBC_NT_REALTIME_A).pkg:					\
+		$(LIBC_NT_REALTIME_A_OBJS)			\
+		$(foreach x,$(LIBC_NT_REALTIME_A_DIRECTDEPS),$($(x)_A).pkg)
 
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -312,6 +396,24 @@ $(LIBC_NT_BCRYPTPRIMITIVES_A):				\
 $(LIBC_NT_BCRYPTPRIMITIVES_A).pkg:			\
 		$(LIBC_NT_BCRYPTPRIMITIVES_A_OBJS)	\
 		$(foreach x,$(LIBC_NT_BCRYPTPRIMITIVES_A_DIRECTDEPS),$($(x)_A).pkg)
+
+#───────────────────────────────────────────────────────────────────────────────
+
+LIBC_NT_ARTIFACTS += LIBC_NT_WINMM_A
+LIBC_NT_WINMM = $(LIBC_NT_WINMM_A_DEPS) $(LIBC_NT_WINMM_A)
+LIBC_NT_WINMM_A = o/$(MODE)/libc/nt/winmm.a
+LIBC_NT_WINMM_A_SRCS := $(wildcard libc/nt/winmm/*.S)
+LIBC_NT_WINMM_A_OBJS = $(LIBC_NT_WINMM_A_SRCS:%.S=o/$(MODE)/%.o)
+LIBC_NT_WINMM_A_CHECKS = $(LIBC_NT_WINMM_A).pkg
+LIBC_NT_WINMM_A_DIRECTDEPS = LIBC_NT_KERNEL32
+LIBC_NT_WINMM_A_DEPS := $(call uniq,$(foreach x,$(LIBC_NT_WINMM_A_DIRECTDEPS),$($(x))))
+$(LIBC_NT_WINMM_A):			\
+		libc/nt/winmm/		\
+		$(LIBC_NT_WINMM_A).pkg	\
+		$(LIBC_NT_WINMM_A_OBJS)
+$(LIBC_NT_WINMM_A).pkg:			\
+		$(LIBC_NT_WINMM_A_OBJS)	\
+		$(foreach x,$(LIBC_NT_WINMM_A_DIRECTDEPS),$($(x)_A).pkg)
 
 #───────────────────────────────────────────────────────────────────────────────
 

@@ -16,17 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 
 //	Loads previously saved processor state.
 //
 //	@param	rdi points to the jmp_buf
 //	@param	esi is returned by setjmp() invocation (coerced nonzero)
 //	@noreturn
-//	@see	gclongjmp()
 //	@see	siglongjmp()
 	.ftrace1
-longjmp:
+longjmp:beg
 	.ftrace2
 _longjmp:
 #ifdef __x86_64__
@@ -51,7 +50,7 @@ _longjmp:
 	ldp	x19,x20,[x0,#80]
 	ldr	x21,[x0,#104]
 	mov	sp,x2
-	ldp	d8 ,d9,[x0,#112]
+	ldp	d8,d9,[x0,#112]
 	ldp	d10,d11,[x0,#128]
 	ldp	d12,d13,[x0,#144]
 	ldp	d14,d15,[x0,#160]
@@ -61,6 +60,6 @@ _longjmp:
 #else
 #error "unsupported architecture"
 #endif
+	end
 	.endfn	longjmp,globl
 	.endfn	_longjmp,globl
-	.alias	longjmp,siglongjmp

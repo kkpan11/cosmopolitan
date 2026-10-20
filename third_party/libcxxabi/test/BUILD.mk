@@ -102,10 +102,11 @@ THIRD_PARTY_LIBCXXABI_TEST_DIRECTDEPS =					\
 	LIBC_PROC							\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
+	LIBC_SYSV							\
 	LIBC_THREAD							\
 	THIRD_PARTY_LIBCXX						\
 	THIRD_PARTY_LIBCXXABI						\
-	THIRD_PARTY_LIBUNWIND
+	THIRD_PARTY_LIBUNWIND						\
 
 THIRD_PARTY_LIBCXXABI_TEST_DEPS :=					\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_LIBCXXABI_TEST_DIRECTDEPS),$($(x))))
@@ -133,8 +134,7 @@ $(THIRD_PARTY_LIBCXXABI_TEST_OBJS): private				\
 			-fexceptions					\
 			-frtti						\
 			-D_LIBCXXABI_BUILDING_LIBRARY			\
-			-D_LIBCPP_BUILDING_LIBRARY			\
-			-D_LIBCPP_CONSTINIT=__constinit
+			-D_LIBCPP_BUILDING_LIBRARY
 
 $(THIRD_PARTY_LIBCXXABI_TEST_OBJS): private CONFIG_CPPFLAGS += -UNDEBUG
 o/$(MODE)/third_party/libcxxabi/test/catch_multi_level_pointer.pass.o: private COPTS += -O0

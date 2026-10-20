@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 enotconn:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	ENOTCONN(%rip),%ecx
+	push	$ENOTCONN
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,ENOTCONN
-	ldrsw	x0,[x1,#:lo12:ENOTCONN]
+	mov	x0,#ENOTCONN
 	b	__errfun
 #else
 #error "unsupported architecture"

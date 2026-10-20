@@ -9,8 +9,8 @@ NET_TURFWAR_OBJS =					\
 	$(NET_TURFWAR_SRCS:%.c=o/$(MODE)/%.o)
 
 NET_TURFWAR_COMS =					\
-	$(NET_TURFWAR_SRCS:%.c=o/$(MODE)/%.com)		\
-	o/$(MODE)/net/turfwar/turfbean.com
+	$(NET_TURFWAR_SRCS:%.c=o/$(MODE)/%)		\
+	o/$(MODE)/net/turfwar/turfbean
 
 NET_TURFWAR_BINS =					\
 	$(NET_TURFWAR_COMS)				\
@@ -28,18 +28,22 @@ NET_TURFWAR_DIRECTDEPS =				\
 	LIBC_SOCK					\
 	LIBC_STDIO					\
 	LIBC_STR					\
+	LIBC_SYSTEM					\
 	LIBC_SYSV					\
 	LIBC_THREAD					\
 	LIBC_X						\
 	NET_HTTP					\
+	NET_HTTPS					\
+	THIRD_PARTY_DLMALLOC				\
 	THIRD_PARTY_GETOPT				\
+	THIRD_PARTY_MBEDTLS				\
 	THIRD_PARTY_MUSL				\
 	THIRD_PARTY_NSYNC				\
 	THIRD_PARTY_NSYNC_MEM				\
 	THIRD_PARTY_SQLITE3				\
 	THIRD_PARTY_STB					\
 	THIRD_PARTY_TZ					\
-	THIRD_PARTY_ZLIB
+	THIRD_PARTY_ZLIB				\
 
 NET_TURFWAR_DEPS :=					\
 	$(call uniq,$(foreach x,$(NET_TURFWAR_DIRECTDEPS),$($(x))))
@@ -48,7 +52,7 @@ o/$(MODE)/net/turfwar/turfwar.pkg:			\
 		$(NET_TURFWAR_OBJS)			\
 		$(foreach x,$(NET_TURFWAR_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/net/turfwar/%.com.dbg:			\
+o/$(MODE)/net/turfwar/%.dbg:				\
 		$(NET_TURFWAR_DEPS)			\
 		o/$(MODE)/net/turfwar/%.o		\
 		o/$(MODE)/net/turfwar/turfwar.pkg	\
@@ -56,7 +60,7 @@ o/$(MODE)/net/turfwar/%.com.dbg:			\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/net/turfwar/turfbean.com.dbg:			\
+o/$(MODE)/net/turfwar/turfbean.dbg:			\
 		$(TOOL_NET_DEPS)			\
 		o/$(MODE)/tool/net/redbean.o		\
 		$(TOOL_NET_REDBEAN_LUA_MODULES)		\

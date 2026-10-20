@@ -25,7 +25,7 @@
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
@@ -36,7 +36,6 @@
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/fileno.h"
-#include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
@@ -452,7 +451,6 @@ static void PrintImage(unsigned yn, unsigned xn,
   size_t size;
   char *v, *vt;
   size = yn * (xn * (32 + (2 + (1 + 3) * 3) * 2 + 1 + 3)) * 1 + 5 + 1;
-  size = ROUNDUP(size, FRAMESIZE);
   CHECK_NOTNULL((vt = _mapanon(size)));
   v = RenderImage(vt, yn, xn, rgb);
   *v++ = '\r';
@@ -538,7 +536,6 @@ static void LoadFile(const char *path, size_t yn, size_t xn, void *rgb) {
   CHECK_NE(-1, fstat(fd, &st));
   CHECK_GT(st.st_size, 0);
   CHECK_LE(st.st_size, INT_MAX);
-  /* LOGIFNEG1(fadvise(fd, 0, 0, MADV_WILLNEED | MADV_SEQUENTIAL)); */
   CHECK_NE(MAP_FAILED,
            (map = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0)));
   CHECK_NOTNULL((data = stbi_load_from_memory(map, st.st_size, &gotx, &goty,
@@ -550,8 +547,8 @@ static void LoadFile(const char *path, size_t yn, size_t xn, void *rgb) {
   stbir_resize_uint8(data, gotx, goty, 0, rgb, xn * XS, yn * YS, 0, CN);
 #else
   CHECK_EQ(CN, 3);
-  data2size = ROUNDUP(sizeof(float) * goty * gotx * CN, FRAMESIZE);
-  data3size = ROUNDUP(sizeof(float) * yn * YS * xn * XS * CN, FRAMESIZE);
+  data2size = sizeof(float) * goty * gotx * CN;
+  data3size = sizeof(float) * yn * YS * xn * XS * CN;
   CHECK_NOTNULL((data2 = _mapanon(data2size)));
   CHECK_NOTNULL((data3 = _mapanon(data3size)));
   rgb2lin(goty * gotx * CN, data2, data);
@@ -625,7 +622,7 @@ int main(int argc, char *argv[]) {
   // FIXME: on the conversion stage should do 2Y because of halfblocks
   // printf( "filename >%s<\tx >%d<\ty >%d<\n\n", filename, x_, y_);
   size = y_ * YS * x_ * XS * CN;
-  CHECK_NOTNULL((rgb = _mapanon(ROUNDUP(size, FRAMESIZE))));
+  CHECK_NOTNULL((rgb = _mapanon(size)));
   for (i = optind; i < argc; ++i) {
     if (!argv[i])
       continue;
@@ -636,7 +633,7 @@ int main(int argc, char *argv[]) {
     }
     PrintImage(y_, x_, rgb);
   }
-  munmap(rgb, ROUNDUP(size, FRAMESIZE));
+  munmap(rgb, size);
   return 0;
 }
 

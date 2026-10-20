@@ -17,6 +17,7 @@
     "__GNUC__"
     "__APPLE__"
     "__linux__"
+    "__gnu_linux__"
     "__HAIKU__"
     "__CYGWIN__"
     "__EMSCRIPTEN__"
@@ -25,10 +26,13 @@
     "__NetBSD__"
     "__NetBSD_Version__"
     "__OpenBSD__"
+    "__Fuchsia__"
     "__COSMOPOLITAN__"
     "__COSMOCC__"
     "__FATCOSMOCC__"
     "__GLIBC__"
+    "__ELF__"
+    "__GNU__"
     "__linux"
     "__MACH__"
     "__GNUG__"
@@ -69,6 +73,7 @@
     "__BMI2__"
     "__FMA__"
     "__FAST_MATH__"
+    "__FINITE_MATH_ONLY__"
     "__ROUNDING_MATH__"
     "__NO_MATH_ERRNO__"
     "__FMA4__"
@@ -128,6 +133,8 @@
     "__ARM_FP16_IEEE"
     "__ARM_FP_FAST"
     "__powerpc__"
+    "__POWERPC__"
+    "__ppc__"
     "__powerpc64__"
     "__POWER9_VECTOR__"
     "__wasm_simd128__"
@@ -235,7 +242,6 @@
 
 (defconst cosmo-cpp-constants-cosmopolitan
  '("__SAUCE__"
-   "FRAMESIZE"
    "ARG_MAX"
    "PATH_MAX"
    "BUFSIZ"
@@ -258,10 +264,8 @@
    "__PG__"
    "__MFENTRY__"
    "__MNO_VZEROUPPER__"
-   "__MNO_RED_ZONE__"
    "__MNOP_MCOUNT__"
-   "__MRECORD_MCOUNT__"
-   "__FNO_OMIT_FRAME_POINTER__"))
+   "__MRECORD_MCOUNT__"))
 
 (defconst cosmo-cpp-constants-clang
   '("__llvm__"

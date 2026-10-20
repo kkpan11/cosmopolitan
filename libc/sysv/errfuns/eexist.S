@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 eexist:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	EEXIST(%rip),%ecx
+	push	$EEXIST
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,EEXIST
-	ldrsw	x0,[x1,#:lo12:EEXIST]
+	mov	x0,#EEXIST
 	b	__errfun
 #else
 #error "unsupported architecture"

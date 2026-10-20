@@ -39,7 +39,7 @@
 #include "libc/sysv/consts/s.h"
 #include "libc/time.h"
 #include "libc/x/x.h"
-#include "libc/zip.internal.h"
+#include "libc/zip.h"
 #include "third_party/getopt/getopt.internal.h"
 #include "tool/build/lib/elfwriter.h"
 #include "tool/build/lib/stripcomponents.h"
@@ -55,7 +55,7 @@ int strip_components_;
 const char *path_prefix_;
 struct timespec timestamp;
 
-wontreturn void PrintUsage(int fd, int rc) {
+[[noreturn]] void PrintUsage(int fd, int rc) {
   tinyprint(fd, "\n\
 NAME\n\
 \n\

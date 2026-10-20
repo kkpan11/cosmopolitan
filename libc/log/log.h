@@ -34,7 +34,6 @@ COSMOPOLITAN_C_START_
 
 extern FILE *__log_file;
 
-int __watch(void *, size_t);
 void __die(void) relegated wontreturn; /* print backtrace and abort() */
 void _meminfo(int);                    /* shows malloc statistics &c. */
 void _memsummary(int);                 /* light version of same thing */
@@ -47,8 +46,6 @@ char *GetSymbolByAddr(int64_t);
 void PrintGarbage(void);
 void PrintGarbageNumeric(FILE *);
 void PrintWindowsMemory(const char *, size_t);
-
-#ifndef __STRICT_ANSI__
 
 #define _LOG_UNLIKELY(x) __builtin_expect(!!(x), 0)
 
@@ -245,7 +242,6 @@ void vffatalf(ARGS, va_list) asm("vflogf") ATTRV relegated wontreturn libcesque;
 #undef ATTR
 #undef ATTRV
 
-#endif /* __STRICT_ANSI__ */
 COSMOPOLITAN_C_END_
 #endif /* COSMOPOLITAN_LIBC_LOG_LOG_H_ */
 #endif /* _COSMO_SOURCE */

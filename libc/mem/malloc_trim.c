@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/mem/mem.h"
 #include "third_party/dlmalloc/dlmalloc.h"
-#ifndef __SANITIZE_ADDRESS__
 
 /**
  * Releases freed memory back to system.
@@ -27,7 +26,9 @@
  * @return 1 if it actually released any memory, else 0
  */
 int malloc_trim(size_t n) {
+#ifdef COSMO_MEM_DEBUG
+  return 0;
+#else
   return dlmalloc_trim(n);
+#endif
 }
-
-#endif /* __SANITIZE_ADDRESS__ */

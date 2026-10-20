@@ -19,6 +19,7 @@ TEST_LIBCXX_DIRECTDEPS =				\
 	LIBC_NEXGEN32E					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
+	LIBC_STR					\
 	LIBC_SYSV					\
 	LIBC_THREAD					\
 	LIBC_TINYMATH					\
@@ -44,7 +45,7 @@ o/$(MODE)/test/libcxx/%.dbg:				\
 
 $(TEST_LIBCXX_OBJS): private OVERRIDE_CXXFLAGS += -fexceptions -frtti
 
-o/$(MODE)/test/libcxx/openmp_test.o: private CXXFLAGS += -fopenmp
+o/$(MODE)/test/libcxx/openmp_test.o: private CXXFLAGS += -fopenmp -O3
 o/$(MODE)/test/libcxx/openmp_test.runs: private QUOTA += -C100
 
 .PHONY: o/$(MODE)/test/libcxx

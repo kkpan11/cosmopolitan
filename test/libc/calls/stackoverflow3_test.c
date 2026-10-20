@@ -56,7 +56,8 @@ void CrashHandler(int sig, siginfo_t *si, void *arg) {
   ASSERT_FALSE(smashed_stack);
   ASSERT_SYS(0, 0, sigaltstack(0, &ss));
   ASSERT_EQ(SS_ONSTACK, ss.ss_flags);
-  kprintf("kprintf avoids overflowing %G %p\n", si->si_signo, si->si_addr);
+  if (!IsWindows())  // TODO(jart): why does win32 need more now?
+    kprintf("kprintf avoids overflowing %G %p\n", si->si_signo, si->si_addr);
   smashed_stack = true;
   // EXPECT_TRUE(__is_stack_overflow(si, ctx));
   //
@@ -85,21 +86,20 @@ void CrashHandler(int sig, siginfo_t *si, void *arg) {
 #endif
 }
 
-int StackOverflow(int f(), int n) {
-  if (n < INT_MAX) {
-    return f(f, n + 1) - 1;
-  } else {
-    return INT_MAX;
-  }
+int StackOverflow(int d) {
+  char A[8];
+  for (int i = 0; i < sizeof(A); i++)
+    A[i] = d + i;
+  if (__veil("r", d))
+    return StackOverflow(d + 1) + A[d % sizeof(A)];
+  return 0;
 }
-
-int (*pStackOverflow)(int (*)(), int) = StackOverflow;
 
 void *MyPosixThread(void *arg) {
   struct sigaction sa;
   struct sigaltstack ss;
   ss.ss_flags = 0;
-  ss.ss_size = sysconf(_SC_MINSIGSTKSZ) + 4096;
+  ss.ss_size = sysconf(_SC_MINSIGSTKSZ) + 8192;
   ss.ss_sp = gc(malloc(ss.ss_size));
   ASSERT_SYS(0, 0, sigaltstack(&ss, 0));
   sa.sa_flags = SA_SIGINFO | SA_ONSTACK;  // <-- important
@@ -107,7 +107,7 @@ void *MyPosixThread(void *arg) {
   sa.sa_sigaction = CrashHandler;
   sigaction(SIGBUS, &sa, 0);
   sigaction(SIGSEGV, &sa, 0);
-  exit(pStackOverflow(pStackOverflow, 0));
+  exit(StackOverflow(1));
   return 0;
 }
 

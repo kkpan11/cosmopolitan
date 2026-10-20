@@ -23,7 +23,7 @@
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/runtime/zipos.internal.h"
 #include "libc/str/str.h"
@@ -74,11 +74,11 @@ int dup3(int oldfd, int newfd, int flags) {
   } else if (!IsWindows()) {
     if (__isfdkind(oldfd, kFdZip) || __isfdkind(newfd, kFdZip)) {
       if (__vforked) {
-        return enotsup();
-      }
-      rc = sys_dup3(oldfd, newfd, flags);
-      if (rc != -1) {
-        _weaken(__zipos_postdup)(oldfd, newfd);
+        rc = enotsup();
+      } else {
+        rc = sys_dup3(oldfd, newfd, flags);
+        if (rc != -1)
+          _weaken(__zipos_postdup)(oldfd, newfd);
       }
     } else {
       rc = sys_dup3(oldfd, newfd, flags);

@@ -19,6 +19,7 @@
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "third_party/nsync/atomic.h"
+#include "third_party/nsync/time.h"
 #include "third_party/nsync/atomic.internal.h"
 #include "third_party/nsync/common.internal.h"
 #include "third_party/nsync/counter.h"
@@ -47,7 +48,7 @@ nsync_counter nsync_counter_new (uint32_t value) {
 
 void nsync_counter_free (nsync_counter c) {
 	nsync_mu_lock (&c->counter_mu);
-	ASSERT (dll_is_empty (c->waiters));
+	unassert (dll_is_empty (c->waiters));
 	nsync_mu_unlock (&c->counter_mu);
 	free (c);
 }
@@ -66,10 +67,10 @@ uint32_t nsync_counter_add (nsync_counter c, int32_t delta) {
 		if (delta > 0) {
 			/* It's illegal to increase the count from zero if
 			   there has been a waiter. */
-			ASSERT (value != (uint32_t) delta || !ATM_LOAD (&c->waited));
-			ASSERT (value > value - delta); /* Crash on overflow. */
+			unassert (value != (uint32_t) delta || !ATM_LOAD (&c->waited));
+			unassert (value > value - delta); /* Crash on overflow. */
 		} else {
-			ASSERT (value < value - delta); /* Crash on overflow. */
+			unassert (value < value - delta); /* Crash on overflow. */
 		}
 		if (value == 0) {
 			struct Dll *p;
@@ -94,13 +95,13 @@ uint32_t nsync_counter_value (nsync_counter c) {
 	return (result);
 }
 
-uint32_t nsync_counter_wait (nsync_counter c, nsync_time abs_deadline) {
+uint32_t nsync_counter_wait (nsync_counter c, int clock, nsync_time abs_deadline) {
 	struct nsync_waitable_s waitable;
 	struct nsync_waitable_s *pwaitable = &waitable;
 	uint32_t result = 0;
 	waitable.v = c;
 	waitable.funcs = &nsync_counter_waitable_funcs;
-	if (nsync_wait_n (NULL, NULL, NULL, abs_deadline, 1, &pwaitable) != 0) {
+	if (nsync_wait_n (NULL, NULL, NULL, clock, abs_deadline, 1, &pwaitable) != 0) {
 		IGNORE_RACES_START ();
 		result = ATM_LOAD_ACQ (&c->value);
 		IGNORE_RACES_END ();

@@ -16,12 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/ctype.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tab.internal.h"
+#include "libc/str/tab.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "third_party/getopt/getopt.internal.h"
@@ -42,7 +43,7 @@ const struct IdName kXedModeNames[] = {
 int g_mode;
 struct XedDecodedInst g_xedd;
 
-wontreturn void ShowUsage(int rc, FILE *f) {
+[[noreturn]] void ShowUsage(int rc, FILE *f) {
   size_t i;
   fputs("Usage: ", f);
   fputs(program_invocation_name, f);

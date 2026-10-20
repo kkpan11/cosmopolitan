@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/mem/mem.h"
 #include "third_party/dlmalloc/dlmalloc.h"
-#ifndef __SANITIZE_ADDRESS__
 
 /**
  * Resizes the space allocated for p to size n, only if this can be
@@ -36,7 +35,9 @@
  * @see dlrealloc_in_place()
  */
 void *realloc_in_place(void *p, size_t n) {
+#ifdef COSMO_MEM_DEBUG
+  return 0;
+#else
   return dlrealloc_in_place(p, n);
+#endif
 }
-
-#endif /* __SANITIZE_ADDRESS__ */

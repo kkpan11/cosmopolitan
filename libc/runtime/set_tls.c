@@ -24,7 +24,6 @@
 #include "libc/nt/thread.h"
 #include "libc/sysv/consts/arch.h"
 #include "libc/thread/tls.h"
-#include "libc/thread/tls2.internal.h"
 
 #define AMD64_SET_FSBASE 129
 #define AMD64_SET_GSBASE 131
@@ -38,11 +37,11 @@ dontinstrument textstartup void __set_tls(struct CosmoTib *tib) {
 #ifdef __x86_64__
   // ask the operating system to change the x86 segment register
   if (IsWindows()) {
-    asm("mov\t%1,%%gs:%0" : "=m"(*((long *)0x1480 + __tls_index)) : "r"(tib));
+    __set_tls_win32(tib);
   } else if (IsLinux()) {
-    sys_set_tls(ARCH_SET_GS, tib);
+    sys_set_tls(ARCH_SET_FS, tib);
   } else if (IsFreebsd()) {
-    sys_set_tls(AMD64_SET_GSBASE, tib);
+    sys_set_tls(AMD64_SET_FSBASE, tib);
   } else if (IsNetbsd()) {
     // netbsd has sysarch(X86_SET_FSBASE) but we can't use that because
     // signal handlers will cause it to be reset due to not setting the
@@ -57,7 +56,7 @@ dontinstrument textstartup void __set_tls(struct CosmoTib *tib) {
     uint64_t val = (uint64_t)tib;
     asm volatile("wrmsr"
                  : /* no outputs */
-                 : "c"(MSR_IA32_FS_BASE), "a"((uint32_t)val),
+                 : "c"(MSR_IA32_GS_BASE), "a"((uint32_t)val),
                    "d"((uint32_t)(val >> 32)));
   }
 #elif defined(__aarch64__)

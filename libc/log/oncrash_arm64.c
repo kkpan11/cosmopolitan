@@ -33,19 +33,20 @@
 #include "libc/calls/ucontext.h"
 #include "libc/cosmo.h"
 #include "libc/cxxabi.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describebacktrace.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/log/internal.h"
 #include "libc/log/log.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/nexgen32e/stackframe.h"
-#include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/runtime/symbols.internal.h"
+#include "libc/runtime/syslib.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/auxv.h"
@@ -183,9 +184,9 @@ static relegated char *GetSymbolName(struct SymbolTable *st, int symbol) {
   static char buf[8192];
   if (!(str = __get_symbol_name(st, symbol)))
     return str;
-  if (!__is_mangled(str))
+  if (!cosmo_is_mangled(str))
     return str;
-  __demangle(buf, str, sizeof(buf));
+  cosmo_demangle(buf, str, sizeof(buf));
   return buf;
 }
 
@@ -211,8 +212,6 @@ static relegated void __oncrash_impl(int sig, siginfo_t *si, ucontext_t *ctx) {
   struct utsname names = {0};
   struct Buffer b[1] = {{buf, size}};
   b->p[b->i++] = '\n';
-  ftrace_enabled(-1);
-  strace_enabled(-1);
   __restore_tty();
   uname(&names);
   gethostname(host, sizeof(host));
@@ -267,7 +266,8 @@ static relegated void __oncrash_impl(int sig, siginfo_t *si, ucontext_t *ctx) {
         if (j)
           Append(b, " ");
         Append(b, "%s%016lx%s x%d%s", ColorRegister(r),
-               ctx->uc_mcontext.regs[r], reset, r, r == 8 || r == 9 ? " " : "");
+               ((uint64_t *)ctx->uc_mcontext.regs)[r], reset, r,
+               r == 8 || r == 9 ? " " : "");
       }
       Append(b, "\n");
     }
@@ -390,15 +390,11 @@ static inline void SpinUnlock(atomic_uint *lock) {
 
 relegated void __oncrash(int sig, siginfo_t *si, void *arg) {
   static atomic_uint lock;
+  ftrace_enabled(-1);
+  strace_enabled(-1);
   BLOCK_CANCELATION;
   SpinLock(&lock);
   __oncrash_impl(sig, si, arg);
-
-  // unlike amd64, the instruction pointer on arm64 isn't advanced past
-  // the debugger breakpoint instruction automatically. we need this so
-  // execution can resume after __builtin_trap().
-  if (arg && sig == SIGTRAP)
-    ((ucontext_t *)arg)->uc_mcontext.PC += 4;
 
   // ensure execution doesn't resume for anything but SIGTRAP / SIGQUIT
   if (arg && sig != SIGTRAP && sig != SIGQUIT) {
@@ -416,6 +412,8 @@ relegated void __oncrash(int sig, siginfo_t *si, void *arg) {
 
   SpinUnlock(&lock);
   ALLOW_CANCELATION;
+  strace_enabled(+1);
+  ftrace_enabled(+1);
 }
 
 #endif /* __aarch64__ */

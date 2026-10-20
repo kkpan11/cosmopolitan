@@ -21,7 +21,7 @@
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/fmt/magnumstrs.internal.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/stdio/stdio.h"
@@ -75,7 +75,7 @@
 
 #define IsSpace(c) ((255 & (c)) <= ' ')
 
-static wontreturn void getargs_fail(const char *path, const char *reason) {
+[[noreturn]] static void getargs_fail(const char *path, const char *reason) {
   const char *errstr;
   if (!(errstr = _strerdoc(errno)))
     errstr = "Unknown error";

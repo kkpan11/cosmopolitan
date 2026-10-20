@@ -24,12 +24,12 @@
 #include "libc/calls/termios.internal.h"
 #include "libc/dce.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/mem/alloca.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/sysv/pib.h"
 
 void __on_tcsetattr(int);
 int tcsetattr_nt(int, int, const struct termios *);
@@ -46,13 +46,12 @@ static const char *DescribeTcsa(char buf[12], int opt) {
 }
 
 static int tcsetattr_impl(int fd, int opt, const struct termios *tio) {
-  if (fd < 0) {
-    return einval();
-  }
 
-  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+  if (fd < 0)
+    return einval();
+
+  if (__isfdkind(fd, kFdZip))
     return enotty();
-  }
 
   if (0 <= fd && fd <= 2 && _weaken(__on_tcsetattr)) {
     static bool once;
@@ -62,17 +61,11 @@ static int tcsetattr_impl(int fd, int opt, const struct termios *tio) {
     }
   }
 
-  if (IsAsan() && !__asan_is_valid(tio, sizeof(*tio))) {
-    return efault();
-  }
-
-  if (IsMetal()) {
+  if (IsMetal())
     return 0;
-  }
 
-  if (IsWindows()) {
+  if (IsWindows())
     return tcsetattr_nt(fd, opt, tio);
-  }
 
   if (IsLinux() || IsBsd()) {
     union metatermios mt;

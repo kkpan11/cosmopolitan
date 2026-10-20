@@ -17,8 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
+#include "libc/intrin/atomic.h"
+#include "libc/thread/barrier.h"
 #include "libc/thread/thread.h"
-#include "third_party/nsync/counter.h"
 
 /**
  * Initializes barrier.
@@ -28,16 +29,16 @@
  *     before the barrier is released, which must be greater than zero
  * @return 0 on success, or error number on failure
  * @raise EINVAL if `count` isn't greater than zero
- * @raise ENOMEM if insufficient memory exists
  */
-errno_t pthread_barrier_init(pthread_barrier_t *barrier,
+errno_t pthread_barrier_init(pthread_barrier_t *b,
                              const pthread_barrierattr_t *attr,
                              unsigned count) {
-  nsync_counter c;
-  if (!count)
+  if (!count || count >= BARRIER_MAX)
     return EINVAL;
-  if (!(c = nsync_counter_new(count)))
-    return ENOMEM;
-  *barrier = (pthread_barrier_t){._nsync = c};
+  b->_count = count;
+  b->_pshared = attr ? *attr : PTHREAD_PROCESS_PRIVATE;
+  atomic_init(&b->_entered, 0);
+  atomic_init(&b->_exited, 0);
+  atomic_init(&b->_round, 0);
   return 0;
 }

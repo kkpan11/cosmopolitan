@@ -27,7 +27,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/dirent.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/calls/weirdtypes.h"
+#include "libc/cosmo.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/limits.h"
 #include "libc/runtime/stack.h"
@@ -36,6 +39,7 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
 __static_yoink("musl_libc_notice");
 
 // clang-format off
@@ -102,15 +106,24 @@ static int do_nftw(char *path,
 		dfd = open(path, O_RDONLY | O_DIRECTORY);
 		err = errno;
 		if (dfd < 0 && err == EACCES) type = FTW_DNR;
-		if (!fd_limit) close(dfd);
+		if (!fd_limit) {
+			close(dfd);
+			dfd = -1;
+		}
         }
 
-	if (!(flags & FTW_DEPTH) && (r=fn(path, &st, type, &lev)))
+	if (!(flags & FTW_DEPTH) && (r=fn(path, &st, type, &lev))) {
+		if (dfd != -1)
+			close(dfd);
 		return r;
+	}
 
 	for (; h; h = h->chain)
-		if (h->dev == st.st_dev && h->ino == st.st_ino)
+		if (h->dev == st.st_dev && h->ino == st.st_ino) {
+			if (dfd != -1)
+				close(dfd);
 			return 0;
+		}
 
 	if ((type == FTW_D || type == FTW_DP) && fd_limit) {
 		if (dfd < 0) {
@@ -170,7 +183,8 @@ int nftw(const char *dirpath,
 	int r, cs;
 	size_t l;
 
-	if (fd_limit <= 0) return 0;
+	if (fd_limit <= 0)
+		return 0;
 
 	l = strlen(dirpath);
 	if (l > PATH_MAX) {
@@ -178,6 +192,9 @@ int nftw(const char *dirpath,
 		return -1;
 	}
 	memcpy(pathbuf, dirpath, l+1);
+
+	if (IsWindows())
+		cosmo_warmup_directory(dirpath, true);
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cs);
 	r = do_nftw(pathbuf, fn, fd_limit, flags, NULL);

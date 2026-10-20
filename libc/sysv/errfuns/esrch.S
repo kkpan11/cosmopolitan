@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 esrch:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	ESRCH(%rip),%ecx
+	push	$ESRCH
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,ESRCH
-	ldrsw	x0,[x1,#:lo12:ESRCH]
+	mov	x0,#ESRCH
 	b	__errfun
 #else
 #error "unsupported architecture"

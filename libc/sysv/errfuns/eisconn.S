@@ -1,16 +1,16 @@
-#include "libc/macros.internal.h"
+#include "libc/errno.h"
+#include "libc/macros.h"
 .text.unlikely
 
 	.ftrace1
 eisconn:
 	.ftrace2
 #ifdef __x86_64__
-	.leafprologue
-	mov	EISCONN(%rip),%ecx
+	push	$EISCONN
+	pop	%rdi
 	jmp	__errfun
 #elif defined(__aarch64__)
-	adrp	x1,EISCONN
-	ldrsw	x0,[x1,#:lo12:EISCONN]
+	mov	x0,#EISCONN
 	b	__errfun
 #else
 #error "unsupported architecture"

@@ -2,6 +2,7 @@
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Gavin Arthur Hayes                                            │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -18,10 +19,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/metalfile.internal.h"
+#include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/limits.h"
 #include "libc/runtime/runtime.h"
 #include "libc/serialize.h"
@@ -34,7 +37,7 @@
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
 
-static char *self;
+char *self;
 static bool loaded, skiptests, skiparg0;
 
 void SetUpOnce(void) {
@@ -68,6 +71,18 @@ void SetUpOnce(void) {
   }
 }
 
+static bool isAbsPath(const char *path) {
+  return strlen(path) >= 2 && path[0] == '/' && path[1] != '/';
+}
+
+static bool isSameFile(const char *a, const char *b) {
+  struct stat st_a, st_b;
+  if (stat(a, &st_a) || stat(b, &st_b)) {
+    return false;
+  }
+  return (st_a.st_dev == st_b.st_dev) && (st_a.st_ino == st_b.st_ino);
+}
+
 __attribute__((__constructor__)) static void Child(int argc, char *argv[]) {
   loaded = !!__program_executable_name;
   if (argc >= 2 && !strcmp(argv[1], "Child")) {
@@ -80,13 +95,36 @@ __attribute__((__constructor__)) static void Child(int argc, char *argv[]) {
     if (rc) {
       exit(122);
     }
-    if (strcmp(argv[2], GetProgramExecutableName())) {
+    const char *path = GetProgramExecutableName();
+    if (!path || !isAbsPath(path) || !isSameFile(argv[2], path)) {
       exit(123);
     }
     if (argc >= 4) {
       if (strcmp(argv[3], argv[0])) {
         exit(124);
       }
+    }
+    exit(0);
+  } else if (argc == 0) {
+    // test argc == 0 childs
+    int rc;
+    if (!IsWindows()) {
+      rc = sys_chdir("/");
+    } else {
+      rc = sys_chdir_nt("/");
+    }
+    if (rc) {
+      exit(122);
+    }
+    if (loaded && kisdangerous(__program_executable_name)) {
+      exit(125);
+    }
+    const char *name = GetProgramExecutableName();
+    if (kisdangerous(name)) {
+      exit(126);
+    }
+    if (strlen(name) == 0) {
+      exit(127);
     }
     exit(0);
   }
@@ -151,6 +189,39 @@ TEST(GetProgramExecutableName, movedSelf) {
   EXITS(0);
   SPAWN(fork);
   execve("./test", (char *[]){"hello", "Child", buf, skiparg0 ? 0 : "hello", 0},
+         (char *[]){0});
+  abort();
+  EXITS(0);
+}
+
+TEST(GetProgramExecutableName, nullArgvAPELoader) {
+  // TODO(G4Vi): Confirm if OpenBSD actually has an issue running elfs. See note
+  //             in posix_spawn_test.c
+  if (skiptests || IsOpenbsd() || IsXnu() || IsWindows() || IsMetal())
+    return;
+  testlib_extract("/zip/ape.elf", "ape.elf", 0555);
+  char *prog = "./ape.elf";
+  SPAWN(fork);
+  execve(prog, (char *const[]){prog, "-", self, NULL}, (char *[]){0});
+  abort();
+  EXITS(0);
+}
+
+TEST(GetProgramExecutableName, elf) {
+  if (skiptests || IsOpenbsd() || IsXnu() || IsWindows() || IsMetal())
+    return;
+  char buf[BUFSIZ];
+  testlib_extract("/zip/gpenchild.elf", "test.elf", 0555);
+  ASSERT_NE(NULL, getcwd(buf, BUFSIZ - 5));
+  stpcpy(buf + strlen(buf), "/test.elf");
+  SPAWN(fork);
+  execve(buf, (char *[]){"hello", "Child", buf, skiparg0 ? 0 : "hello", 0},
+         (char *[]){0});
+  abort();
+  EXITS(0);
+  SPAWN(fork);
+  execve("./test.elf",
+         (char *[]){"hello", "Child", buf, skiparg0 ? 0 : "hello", 0},
          (char *[]){0});
   abort();
   EXITS(0);

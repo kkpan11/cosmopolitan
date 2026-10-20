@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
@@ -159,40 +158,24 @@ static __vex void *__memmove(void *dst, const void *src, size_t n) {
 #if defined(__x86_64__) && !defined(__chibicc__)
       if (n < kHalfCache3 || !kHalfCache3) {
         if (d > s) {
-          if (IsAsan() || n < 900 || !X86_HAVE(ERMS)) {
-            do {
-              n -= 32;
-              v = *(const xmm_t *)(s + n);
-              w = *(const xmm_t *)(s + n + 16);
-              *(xmm_t *)(d + n) = v;
-              *(xmm_t *)(d + n + 16) = w;
-            } while (n >= 32);
-          } else {
-            asm("std\n\t"
-                "rep movsb\n\t"
-                "cld"
-                : "=D"(d), "=S"(s), "+c"(n), "=m"(*(char(*)[n])d)
-                : "0"(d + n - 1), "1"(s + n - 1), "m"(*(char(*)[n])s));
-            return dst;
-          }
+          do {
+            n -= 32;
+            v = *(const xmm_t *)(s + n);
+            w = *(const xmm_t *)(s + n + 16);
+            *(xmm_t *)(d + n) = v;
+            *(xmm_t *)(d + n + 16) = w;
+          } while (n >= 32);
         } else {
-          if (IsAsan() || n < 900 || !X86_HAVE(ERMS)) {
-            i = 0;
-            do {
-              v = *(const xmm_t *)(s + i);
-              w = *(const xmm_t *)(s + i + 16);
-              *(xmm_t *)(d + i) = v;
-              *(xmm_t *)(d + i + 16) = w;
-            } while ((i += 32) + 32 <= n);
-            d += i;
-            s += i;
-            n -= i;
-          } else {
-            asm("rep movsb"
-                : "+D"(d), "+S"(s), "+c"(n), "=m"(*(char(*)[n])d)
-                : "m"(*(char(*)[n])s));
-            return dst;
-          }
+          i = 0;
+          do {
+            v = *(const xmm_t *)(s + i);
+            w = *(const xmm_t *)(s + i + 16);
+            *(xmm_t *)(d + i) = v;
+            *(xmm_t *)(d + i + 16) = w;
+          } while ((i += 32) + 32 <= n);
+          d += i;
+          s += i;
+          n -= i;
         }
       } else {
         if (d > s) {

@@ -29,6 +29,8 @@
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/cosmo.h"
+#include "libc/ctype.h"
 #include "libc/dce.h"
 #include "libc/elf/def.h"
 #include "libc/elf/elf.h"
@@ -38,10 +40,10 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/promises.internal.h"
-#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/promises.h"
+#include "libc/intrin/safemacros.h"
 #include "libc/limits.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/math.h"
 #include "libc/mem/alloca.h"
 #include "libc/nexgen32e/kcpuids.h"
@@ -61,8 +63,6 @@
 #include "libc/sysv/consts/pr.h"
 #include "libc/sysv/consts/prio.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/sysv/consts/rlim.h"
-#include "libc/sysv/consts/rlimit.h"
 #include "libc/sysv/consts/sched.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/x/x.h"
@@ -223,9 +223,9 @@ void GetOpts(int argc, char *argv[]) {
   g_fszquota = 256 * 1000 * 1000;
   if (!sysinfo(&si)) {
     g_memquota = si.totalram;
-    g_proquota = __get_cpu_count() + si.procs;
+    g_proquota = cosmo_cpu_count() + si.procs;
   } else {
-    g_proquota = __get_cpu_count() * 100;
+    g_proquota = cosmo_cpu_count() * 100;
     g_memquota = 4L * 1024 * 1024 * 1024;
   }
   while ((opt = getopt(argc, argv, "hnqkNVT:p:u:g:c:C:D:P:M:F:O:v:")) != -1) {
@@ -372,7 +372,11 @@ int SetLimit(int r, long lo, long hi) {
 }
 
 static int GetBaseCpuFreqMhz(void) {
+#ifdef __x86_64__
   return KCPUIDS(16H, EAX) & 0x7fff;
+#else
+  return 0;
+#endif
 }
 
 int SetCpuLimit(int secs) {
@@ -652,8 +656,8 @@ int main(int argc, char *argv[]) {
   bool hasfunbits;
   int useruid, usergid;
   int owneruid, ownergid;
-  int oldfsuid, oldfsgid;
   unsigned long ipromises;
+  int oldfsuid = 0, oldfsgid = 0;
 
   // parse flags
   GetOpts(argc, argv);

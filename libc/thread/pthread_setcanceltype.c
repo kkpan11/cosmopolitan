@@ -19,8 +19,8 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
 #include "libc/mem/alloca.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
@@ -76,8 +76,10 @@ errno_t pthread_setcanceltype(int type, int *oldtype) {
       err = EINVAL;
       break;
   }
+#ifdef MODE_DBG
   STRACE("pthread_setcanceltype(%s, [%s]) → %s",
          DescribeCancelType(alloca(12), 0, &type),
          DescribeCancelType(alloca(12), err, oldtype), DescribeErrno(err));
+#endif
   return err;
 }

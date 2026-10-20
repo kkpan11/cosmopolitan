@@ -19,8 +19,7 @@
 #include "libc/calls/struct/flock.h"
 #include "libc/calls/struct/flock.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/sysv/consts/f.h"
 
@@ -28,13 +27,12 @@
 
 #define append(...) o += ksnprintf(buf + o, N - o, __VA_ARGS__)
 
-const char *(DescribeFlock)(char buf[N], int cmd, const struct flock *l) {
+const char *_DescribeFlock(char buf[N], int cmd, const struct flock *l) {
   int o = 0;
 
   if (!l)
     return "NULL";
-  if ((!IsAsan() && kisdangerous(l)) ||
-      (IsAsan() && !__asan_is_valid(l, sizeof(*l)))) {
+  if (kisdangerous(l)) {
     ksnprintf(buf, N, "%p", l);
     return buf;
   }
@@ -53,7 +51,7 @@ const char *(DescribeFlock)(char buf[N], int cmd, const struct flock *l) {
     append(", .l_len=%'ld", l->l_len);
   }
 
-  if (l->l_pid && (cmd == F_GETLK || cmd == F_OFD_GETLK)) {
+  if (l->l_pid && (cmd == F_GETLK)) {
     append(", .l_pid=%d", l->l_pid);
   }
 

@@ -16,10 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/map.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/dce.h"
 #ifdef __x86_64__
@@ -32,8 +32,8 @@
 //	@param	rdx is environ
 //	@param	rcx is auxv
 //	@noreturn
-cosmo:	push	%rbp
-	mov	%rsp,%rbp
+cosmo:	beg
+	pro
 	mov	%edi,%r12d
 	mov	%rsi,%r13
 	mov	%rdx,%r14
@@ -41,11 +41,12 @@ cosmo:	push	%rbp
 
 #if SYSDEBUG
 	call	__strace_init
+	.yoink	kprintf_crash_ctor
 	mov	%eax,%r12d
 #endif /* SYSDEBUG */
 
 #ifndef NOX87
-//	Windows always initializes FPU to douuble precision.
+//	Windows always initializes FPU to double precision.
 //	WSL breaks Linux ABI by initializing FPU to double precision.
 //	This code makes long double long again.
 //
@@ -72,27 +73,6 @@ cosmo:	push	%rbp
 	.previous
 #endif
 
-#ifdef __FAST_MATH__
-	push	%rax
-	stmxcsr	(%rsp)
-//
-//	Enable hardware optimizations in violation of the IEEE standard.
-//
-//	- 0x0040 enables "DAZ: Denormals Are Zeros" in MXCSR. This causes the
-//	  processor to turn denormal inputs into zero, before computing them.
-//	  See Intel Manual Vol. 1 §10.2.3.4
-//
-//	- 0x8000 enables "FTZ: Flush To Zero" in MXCSR. This means a floating
-//	  point operation that results in underflow will be set to zero, with
-//	  the same sign, rather than producing a denormalized output. It will
-//	  happen only if underflow trapping hasnt been enabled. See the Intel
-//	  Manual Vol. 1 §10.2.3.3.
-//
-	orl	$0x8040,(%rsp)
-	ldmxcsr	(%rsp)
-	pop	%rax
-#endif
-
 //	run assembly init
 	call	_init
 
@@ -104,7 +84,10 @@ cosmo:	push	%rbp
 	je	2f
 	push	%rax
 	push	%rax
-	call	.Largs
+	mov	%r12d,%edi
+	mov	%r13,%rsi
+	mov	%r14,%rdx
+	mov	%r15,%rcx
 	call	*(%rax)
 	pop	%rax
 	pop	%rax
@@ -112,17 +95,15 @@ cosmo:	push	%rbp
 	jmp	1b
 
 //	call main()
-2:	call	.Largs
+2:	mov	%r12d,%edi
+	mov	%r13,%rsi
+	mov	%r14,%rdx
+	mov	%r15,%rcx
 	.weak	main
 	call	main
 	xchg	%eax,%edi
 	call	exit
-
-.Largs:	mov	%r12d,%edi
-	mov	%r13,%rsi
-	mov	%r14,%rdx
-	mov	%r15,%rcx
-	ret
+	end
 	.endfn	cosmo,weak
 
 //	Enables Thread Local Storage.
@@ -134,15 +115,13 @@ cosmo:	push	%rbp
 	pop	%rdi
 	.init.end 304,_init_tls
 
-#if IsAsan()
-	.init.start 305,_init_symbols
+	.init.start 305,_init_fds
 	push	%rdi
 	push	%rsi
-	call	__init_symbols
+	call	__init_fds
 	pop	%rsi
 	pop	%rdi
-	.init.end 305,_init_symbols
-#endif
+	.init.end 305,_init_fds
 
 #ifdef FTRACE
 	.init.start 306,_init_ftrace

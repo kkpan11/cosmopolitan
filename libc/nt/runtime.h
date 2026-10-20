@@ -12,11 +12,10 @@
  * bloating binaries with debug information the user doesn't need.
  */
 
-#define kNtCpUtf8             65001
-#define kNtInvalidHandleValue -1L
-#define kNtStdInputHandle     -10u
-#define kNtStdOutputHandle    -11u
-#define kNtStdErrorHandle     -12u
+#define kNtCpUtf8          65001
+#define kNtStdInputHandle  -10u
+#define kNtStdOutputHandle -11u
+#define kNtStdErrorHandle  -12u
 
 #define GetCurrentProcess() -1
 
@@ -43,6 +42,8 @@ bool32 SetDefaultDllDirectories(unsigned dirflags);
 bool32 ProcessPrng(void *RandomBuffer, uint32_t RandomBufferLength);
 uint32_t GetModuleFileName(int64_t hModule, char16_t *lpFilename,
                            uint32_t nSize);
+bool32 IsWow64Process2(intptr_t hProcess, uint16_t *out_pProcessMachine,
+                       uint16_t *out_opt_pNativeMachine);
 
 #if ShouldUseMsabiAttribute()
 #include "libc/nt/thunk/runtime.inc"

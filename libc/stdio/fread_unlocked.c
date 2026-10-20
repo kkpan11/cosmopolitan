@@ -19,8 +19,9 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/macros.internal.h"
+#include "libc/macros.h"
 #include "libc/stdckdint.h"
 #include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
@@ -28,21 +29,27 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
 
-static ssize_t readvall(int fd, struct iovec *iov, int iovlen) {
+static ssize_t readvall(FILE *f, struct iovec *iov, int iovlen, size_t need) {
   ssize_t rc;
   size_t got, toto;
-  toto = 0;
-  do {
-    if ((rc = readv(fd, iov, iovlen)) == -1) {
-      if (toto) {
-        if (errno == EINTR)
-          continue;
+  for (toto = 0;;) {
+
+    // perform i/o
+    if ((rc = readv(f->fd, iov, iovlen)) == -1) {
+      f->state = errno;
+      if (toto)
         return toto;
-      }
       return -1;
     }
     got = rc;
     toto += got;
+    if (!got) {
+      f->state = EOF;
+      return toto;
+    }
+
+    // roll forward iov
+    // skip over empty elements
     for (;;) {
       if (!iov->iov_len) {
         --iovlen;
@@ -56,9 +63,14 @@ static ssize_t readvall(int fd, struct iovec *iov, int iovlen) {
         iov->iov_len -= got;
         break;
       }
+      if (!iovlen)
+        return toto;
     }
-  } while (got && iovlen);
-  return toto;
+
+    // don't trigger eof condition if we're rolling greed to fill buffer
+    if (toto >= need)
+      return toto;
+  }
 }
 
 /**
@@ -67,6 +79,7 @@ static ssize_t readvall(int fd, struct iovec *iov, int iovlen) {
  * @param stride specifies the size of individual items
  * @param count is the number of strides to fetch
  * @return count on success, [0,count) on eof, or 0 on error or count==0
+ * @cancelationpoint
  */
 size_t fread_unlocked(void *buf, size_t stride, size_t count, FILE *f) {
   char *p;
@@ -74,15 +87,29 @@ size_t fread_unlocked(void *buf, size_t stride, size_t count, FILE *f) {
   struct iovec iov[2];
   size_t n, m, got, need;
 
-  // check state and parameters
-  if ((f->iomode & O_ACCMODE) == O_WRONLY) {
+  // check state
+  if (f->state == EOF)
+    return 0;
+  if ((f->oflags & O_ACCMODE) == O_WRONLY) {
     f->state = errno = EBADF;
     return 0;
   }
+
+  // flush buffered output
   if (f->beg > f->end) {
-    f->state = errno = EINVAL;
-    return 0;
+    if (IsModeDbg())
+      // the application shall ensure that output is not directly
+      // followed by input without an intervening call to fflush() or to
+      // a file positioning function (fseek(), fsetpos(), or rewind()),
+      // and input is not directly followed by output without an
+      // intervening call to a file positioning function, unless the
+      // input operation encounters end-of-file. -Quoth POSIX.1-2024
+      unassert(!"posix requires fflush between stdio reads and writes");
+    if (fflush_unlocked(f))
+      return 0;
   }
+
+  // compute size
   if (ckd_mul(&n, stride, count)) {
     f->state = errno = EOVERFLOW;
     return 0;
@@ -108,11 +135,8 @@ size_t fread_unlocked(void *buf, size_t stride, size_t count, FILE *f) {
     m *= stride;
     if (m)
       memcpy(p, f->buf + f->beg, m);
-    if ((f->beg += m) == f->end) {
+    if ((f->beg += m) == f->end)
       f->state = EOF;
-      f->beg = 0;
-      f->end = 0;
-    }
     return m / stride;
   }
 
@@ -134,27 +158,16 @@ size_t fread_unlocked(void *buf, size_t stride, size_t count, FILE *f) {
     iov[1].iov_base = NULL;
     iov[1].iov_len = 0;
   }
-  if (f->bufmode == _IONBF) {
-    rc = readv(f->fd, iov, 2);
-  } else {
-    rc = readvall(f->fd, iov, 2);
-  }
-  if (rc == -1) {
-    f->state = errno;
+  rc = readvall(f, iov, 2, need);
+  if (rc == -1)
     return 0;
-  }
   got = rc;
 
   // handle partial fulfillment
   if (got < need) {
     got += m;
-    if (got % stride) {
-      f->state = eio();
-      return 0;
-    }
     f->beg = 0;
     f->end = 0;
-    f->state = EOF;
     return got / stride;
   }
 

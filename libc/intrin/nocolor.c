@@ -16,39 +16,26 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/dce.h"
+#include "libc/intrin/getenv.h"
 #include "libc/log/internal.h"
 #include "libc/runtime/runtime.h"
 
-#define IsDumb(s) \
-  (s[0] == 'd' && s[1] == 'u' && s[2] == 'm' && s[3] == 'b' && !s[4])
+#ifdef __x86_64__
+__static_yoink("_init_nocolor");
+#endif
 
-/**
- * Indicates if ANSI terminal colors are inappropriate.
- *
- * Normally this variable should be false. We only set it to true if
- * we're running on an old version of Windows or the environment
- * variable `TERM` is set to `dumb`.
- *
- * We think colors should be the norm, since most software is usually
- * too conservative about removing them. Rather than using `isatty`
- * consider using sed for instances where color must be removed:
- *
- *      sed 's/\x1b\[[;[:digit:]]*m//g' <color.txt >uncolor.txt
- *
- * For some reason, important software is configured by default in many
- * operating systems, to not only disable colors, but utf-8 too! Here's
- * an example of how a wrapper script can fix that for `less`.
- *
- *      #!/bin/sh
- *      LESSCHARSET=UTF-8 exec /usr/bin/less -RS "$@"
- *
- * Thank you for using colors!
- */
-bool __nocolor;
+bool __nocolor = true;
 
-__attribute__((__constructor__(20))) optimizesize textstartup void
-__nocolor_init(int argc, char **argv, char **envp, intptr_t *auxv) {
+optimizesize dontinstrument textstartup void __nocolor_init(void) {
+  bool res = false;
   char *s;
-  __nocolor = IsWindows() || ((s = getenv("TERM")) && IsDumb(s));
+  if (environ)
+    if ((s = __getenv(environ, "TERM").s))
+      if (s[0] == 'd' &&  //
+          s[1] == 'u' &&  //
+          s[2] == 'm' &&  //
+          s[3] == 'b' &&  //
+          s[4] == '\0')
+        res = true;
+  __nocolor = res;
 }

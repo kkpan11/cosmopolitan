@@ -16,8 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/nt/files.h"
+#include "libc/nt/runtime.h"
 #include "libc/nt/thunk/msabi.h"
 
 __msabi extern typeof(RemoveDirectory) *const __imp_RemoveDirectoryW;
@@ -28,6 +29,7 @@ __msabi extern typeof(RemoveDirectory) *const __imp_RemoveDirectoryW;
 textwindows bool32 RemoveDirectory(const char16_t *lpPathName) {
   bool32 ok;
   ok = __imp_RemoveDirectoryW(lpPathName);
-  NTTRACE("RemoveDirectory(%#hs) → %hhhd", lpPathName, ok);
+  NTTRACE("RemoveDirectory(%#!hs) → {%hhhd, %d}", lpPathName, ok,
+          GetLastError());
   return ok;
 }
